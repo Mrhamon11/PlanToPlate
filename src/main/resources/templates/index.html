@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+    <!-- This template will be embedded in the master layout -->
+    
+    <div th:fragment="content">
+        <div class="bg-white rounded-lg shadow-md p-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-4">Welcome to PlanToPlate</h1>
+            <p class="text-gray-600 mb-6">
+                Your meal planning application powered by Spring Boot 3.x, HTMX, and Thymeleaf.
+            </p>
+            <div class="bg-green-50 border-l-4 border-green-400 p-4 rounded">
+                <p class="text-green-700 text-sm">
+                    <strong>Status:</strong> Application initialized successfully with SQLite WAL mode and virtual threads enabled.
+                </p>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
