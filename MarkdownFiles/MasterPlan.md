@@ -15,7 +15,7 @@
 ## Milestone Tracker
 
 ### Milestone 1: Core Base & Security Infrastructure
-* [ ] **Task 1:** Project Skeleton, SQLite WAL Provisioning, & Base Layout Setup
+* [x] **Task 1:** Project Skeleton, SQLite WAL Provisioning, & Base Layout Setup ✅
 * [ ] **Task 2:** RBAC Security, Persistent Session Management, & Temp Password Lifecycle
 
 ### Milestone 2: Relational Domain & Async Interface

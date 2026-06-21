@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:th="http://www.thymeleaf.org"
+      lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PlanToPlate - Meal Planning Application">
+    <title th:replace="{::attr|placeholder}">PlanToPlate</title>
+
+    <!-- HTMX for Asynchronous Hypermedia Interactions -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Tailwind CSS 4 (Utility CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+
+<body class="min-h-screen bg-gray-50 text-gray-800 antialiased">
+
+    <!-- Header / Navigation Area -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <nav class="max-w-6xl mx-auto px-4 py-3" th:fragment="navigation">
+            <!-- Navigation links would be inserted here -->
+        </nav>
+    </header>
+
+    <!-- Primary Content Fragment (Mobile Responsive) -->
+    <main class="max-w-6xl mx-auto px-4 py-6"
+         id="app-content"
+         th:fragment="content(content)">
+        <!-- Dynamic content injection point for HTMX requests and Thymeleaf views -->
+        <th:block th:replace="${content}"></th:block>
+    </main>
+
+    <!-- Footer Area -->
+    <footer class="bg-gray-800 text-white mt-auto">
+        <div class="max-w-6xl mx-auto px-4 py-4" th:fragment="footer">
+            <p>&copy; 2026 PlanToPlate. All rights reserved.</p>
+        </div>
+    </footer>
+
+</body>
+</html>
