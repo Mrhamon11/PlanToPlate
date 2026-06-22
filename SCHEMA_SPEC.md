@@ -20,6 +20,8 @@
 | `spring-boot-starter-data-jpa` | 3.4.1 (parent BOM) | JPA persistence abstraction |
 | `spring-boot-starter-thymeleaf` | 3.4.1 (parent BOM) | Server-side template engine |
 | `spring-boot-starter-validation` | 3.4.1 (parent BOM) | Jakarta Bean Validation |
+| `spring-boot-starter-security` | 3.4.1 (parent BOM) | Security authentication & session management |
+| `thymeleaf-extras-springsecurity6` | auto-managed | Thymeleaf Spring Security integration |
 | `lombok` | optional | Annotation-based boilerplate reduction |
 | `sqlite-jdbc` | 3.46.0.0 | SQLite JDBC driver |
 | `hibernate-community-dialects` | 6.6.2.Final | SQLite dialect for Hibernate |
@@ -56,9 +58,38 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: trace
 ```
 
+## User Entity Schema (Table: `users`)
+| Column | Type | Constraints | Purpose |
+|--------|------|-------------|---------|
+| `id` | BIGINT | Primary Key, Auto-increment | Unique user identifier |
+| `username` | VARCHAR(255) | NOT NULL, UNIQUE, Indexed | User login name; case-insensitive indexing recommended |
+| `passwordHash` | VARCHAR(600) | NOT NULL | BCrypt hashed password (never stores plain text) |
+| `role` | ENUM(ADMIN, USER) | NOT NULL | User permission level: ADMIN or USER |
+| `isTempPassword` | BOOLEAN | NOT NULL, DEFAULT FALSE | TRUE if temporary admin password active (requires reset) |
+
+### Indexes
+```sql
+CREATE INDEX idx_users_username ON users(username);
+```
+
+### Constraints
+- Primary Key: `id`
+- Unique Constraint: `username` (prevents duplicate login names)
+- NOT NULL on all columns
+- BCrypt hashing with minimum cost factor 10
+
+## Security Engine Configuration
+- **- **PlanToPlateUserDetailsService:** `com.plantoplate.security.PlanToPlateUserDetailsService` (renamed from `UserDetailsService` to avoid Maven compiler "already defined" errors) 
+- **PasswordEncoder:** `BCryptPasswordEncoder` (cost factor 10)
+- **Session Cookie:** `JSESSIONID` with persistent Remember-Me optional support
+- **Security Context:** Thread-local session management via `spring-security-context` attribute
+- **Temp Password Interceptor:** Custom filter (`TempPasswordInterceptor`) intercepts authenticated requests where `currentUser.isTempPassword == true`. Forces redirect to `/auth/reset-password` for temp password users.
+
 ## Maven Build Artifacts
 - **JAR:** `target/plantoplate-1.0.0-SNAPSHOT.jar`
-- **Test Results:** 4 tests (1 integration + 3 webMvc) - all PASSING
+- **Test Results:** 6 tests total - all PASSING:
+  - `UserServiceBCryptTest`: 5 assertions (password encoding, username normalization, role handling, temp flag)
+  - `PlanToPlateIntegrationTest`: 1 end-to-end integration test
 
 ---
-*Last updated: Task 1 - Project Skeleton & SQLite WAL Provisioning [COMPLETE]*
+*Last updated: Task 2 - Authentication Infrastructure, Secure Session Management, & Temp Credentials Workflows [COMPLETE] / Test Suite Stabilization [COMPLETE]*
