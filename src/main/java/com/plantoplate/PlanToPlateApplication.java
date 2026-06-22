@@ -1,9 +1,11 @@
 package com.plantoplate;
 
-import com.plantoplate.service.UserService;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import com.plantoplate.service.UserService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
  * Main entry point for the PlanToPlate Spring Boot 3.x application.
@@ -14,21 +16,21 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * - Hibernate with automatic schema update tracking
  */
 @SpringBootApplication
-public class PlanToPlateApplication {
+public class PlanToPlateApplication implements CommandLineRunner {
 
-    @Autowired
+    @Autowired(required = false)
     private UserService userService;
+
+    @Autowired(required = false)
+    private BCryptPasswordEncoder passwordEncoder;
 
     public static void main(String[] args) {
         SpringApplication.run(PlanToPlateApplication.class, args);
     }
 
-    /**
-     * Seeds default admin user on application startup if none exists.
-     */
-    @Autowired(required = false)
-    public void seedAdminUser(UserService userService) {
-        if (userService != null) {
+    @Override
+    public void run(String... args) {
+        if (userService != null && passwordEncoder != null) {
             userService.createAdminUser();
         }
     }
