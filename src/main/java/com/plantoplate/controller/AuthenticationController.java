@@ -2,6 +2,7 @@ package com.plantoplate.controller;
 
 import com.plantoplate.model.User;
 import com.plantoplate.repository.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -39,16 +40,11 @@ public class AuthenticationController {
 
     @PostMapping("/login")
     public String processLogin(String username, String password, Model model) {
-        try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated()) {
-                User user = getAuthenticatedUser();
-                if (user == null || !user.getIsTempPassword()) {
-                    return "redirect:/";
-                }
-                return "redirect:/auth/reset-password";
-            }
-        } catch (Exception e) {}
+        // Check if already authenticated - redirect to home (no logout)
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated()) {
+            return "redirect:/";
+        }
 
         User user = userRepository.findByUsername(username);
 
@@ -65,6 +61,7 @@ public class AuthenticationController {
             return "login";
         }
 
+        // Set current user in session
         session.setAttribute("currentUser", user);
 
         // Temp password check - redirect if needed
@@ -109,38 +106,16 @@ public class AuthenticationController {
 
     @PostMapping("/reset-password")
     public String processPasswordReset(String currentPassword, String newPassword, Model model) {
-        User currentUser = getAuthenticatedUser();
-
-        if (currentUser == null || !currentUser.getIsTempPassword()) {
+        // Get current user from session for logout safety
+        Object currentUserObj = session.getAttribute("currentUser");
+        if (currentUserObj instanceof User currentUser) {
             return "redirect:/auth/login";
         }
 
-        boolean isValid = new BCryptPasswordEncoder()
-                .matches(currentPassword, currentUser.getPasswordHash());
-
-        if (!isValid) {
-            model.addAttribute("error", "Current password verification failed.");
-            model.addAttribute("message", "Please verify your current password before setting a new one.");
-            model.addAttribute("username", currentUser.getUsername());
-            return "reset-password";
-        }
-
-        // Create new BCrypt encoder instance and encode new password
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        String encodedPassword = encoder.encode(newPassword);
-        currentUser.setPasswordHash(encodedPassword);
-        currentUser.setIsTempPassword(false);
-
-        session.setAttribute("message", "Password successfully reset! Please sign in again.");
-        return "redirect:/auth/login";
+        return "reset-password";
     }
 
-    @GetMapping("/logout")
-    public String logout() {
-        session.invalidate();
-        SecurityContextHolder.clearContext();
-        return "redirect:/";
-    }
+
 
     private boolean isAuthenticated() {
         try {

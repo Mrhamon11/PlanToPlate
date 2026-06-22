@@ -37,7 +37,10 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .authorizeHttpRequests(authz -> authz.anyRequest().authenticated())
+            .authorizeHttpRequests(authz -> authz
+                .requestMatchers("/auth/**", "/error").permitAll()
+                .anyRequest().authenticated()
+            )
             .formLogin(form -> form
                 .loginPage("/auth/login")
                 .loginProcessingUrl("/auth/login")
@@ -47,15 +50,18 @@ public class SecurityConfig {
             )
             .logout(logout -> logout
                 .logoutUrl("/auth/logout")
-                .logoutSuccessHandler((request, response, authentication) -> {
-                    response.sendRedirect(request.getContextPath() + "/");
-                })
                 .invalidateHttpSession(true)
                 .deleteCookies("JSESSIONID")
+                .logoutSuccessHandler((request, response, authentication) -> {
+                    try {
+                        response.sendRedirect(request.getContextPath() + "/");
+                    } catch (Exception e) {
+                        // Ignore redirect exceptions
+                    }
+                })
                 .permitAll()
             )
             .addFilterBefore(tempPasswordInterceptor, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
-
         return http.build();
     }
 }

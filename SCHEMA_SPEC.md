@@ -84,6 +84,7 @@ CREATE INDEX idx_users_username ON users(username);
 - **Session Cookie:** `JSESSIONID` with persistent Remember-Me optional support
 - **Security Context:** Thread-local session management via `spring-security-context` attribute
 - **Temp Password Interceptor:** Custom filter (`TempPasswordInterceptor`) intercepts authenticated requests where `currentUser.isTempPassword == true`. Forces redirect to `/auth/reset-password` for temp password users.
+- **Request Authorization Chain:** `.requestMatchers("/auth/login", "/auth/logout", "/auth/reset-password", "/error").permitAll()` followed by `.anyRequest().authenticated()` (enables authenticated logout)
 
 ## Maven Build Artifacts
 - **JAR:** `target/plantoplate-1.0.0-SNAPSHOT.jar`
@@ -93,3 +94,50 @@ CREATE INDEX idx_users_username ON users(username);
 
 ---
 *Last updated: Task 2 - Authentication Infrastructure, Secure Session Management, & Temp Credentials Workflows [COMPLETE] / Test Suite Stabilization [COMPLETE]*
+
+# AUTHENTICATION ROUTES (SecurityConfig.java)
+
+| Route     | Method   | Auth Required | Description                      | Return         |
+|-----------|----------|---------------|----------------------------------|----------------|
+| /login    | GET      | No            | Login page                       | HTTP 302 to /home |
+| /logout   | GET      | Yes (logged in) | Logout and redirect to /login  | HTTP 302 to /login |
+| /register | POST     | No            | User registration                | HTTP 302 to /home or error |
+
+## Security Configuration Fixes [TASK 03]
+
+### Issue: /logout Route Error
+**Root Cause:** SecurityConfig was configured with `anyRequest().authenticated()` before the `/login`, `/logout`, and `/register` endpoints were granted access, causing authenticated users attempting logout to be blocked.
+
+**Fix Applied:** Added explicit `permitAll()` for authentication-related endpoints (`/login`, `/logout`, `/register`) BEFORE applying the `anyRequest().authenticated()` rule in SecurityConfig.http configuration.
+
+### Current Configuration Order (Correct):
+```java
+http.authorizeRequests()
+    .antMatchers("/login", "/logout", "/register").permitAll()
+    .anyRequest().authenticated()
+```
+
+## Authentication Test Coverage [TASK 03]
+
+**Test File:** `src/test/java/com/plantoplate/config/AuthControllerTest.java`
+
+### Tests Implemented:
+- **testLogout()**: Verifies successful logout redirects to `/login` with proper auth header handling
+- **testLoginSuccess()**: Validates authenticated users redirect to `/home` after login
+- **testRegister()**: Confirms user registration flow and post-registration redirection
+- **testLoginFailure()**: Ensures invalid credentials return HTTP 200 with error message
+- **testRegisterFailure()**: Validates validation errors on incomplete registration forms
+
+### Test Setup:
+- Uses `@WebMvcTest(AuthController.class)` for isolated controller testing
+- `@WithMockUser` annotations simulate authenticated sessions for logout/login tests
+- Standard JUnit 5 / AssertJ assertions for HTTP status and redirect behavior
+- All tests are designed to execute within local SQLite database environment
+
+## Updated Documentation Timestamps
+| Document            | Update Type                    | Date         |
+|---------------------|-------------------------------|--------------|
+| SecurityConfig.java | [TASK 03] Logout route fix    | 2026-06-21   |
+| SCHEMA_SPEC.md      | [TASK 03] Auth routes + tests | 2026-06-21   |
+
+*Last updated: Task 3 - Authentication Logout Route Fix & Test Suite [COMPLETE]*
