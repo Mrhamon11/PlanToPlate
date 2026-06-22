@@ -4,12 +4,12 @@ import com.plantoplate.model.User;
 import com.plantoplate.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 /**
  * Service for managing user creation and seeding default admin accounts.
  */
-@Component
+@Service
 public class UserService {
 
     private final UserRepository userRepository;
