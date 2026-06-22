@@ -14,9 +14,23 @@
 
 ## Milestone Tracker
 
-### Milestone 1: Core Base & Security Infrastructure
+### Milestone 1: Core Base & Security Infrastructure ✅ COMPLETE
 * [x] **Task 1:** Project Skeleton, SQLite WAL Provisioning, & Base Layout Setup ✅
 * [x] **Task 2:** RBAC Security, Persistent Session Management, & Temp Password Lifecycle ✅
+
+#### Task 2 - Complete Deliverables (All Requirements Met):
+- ✅ `User` JPA entity with id, username, passwordHash, role (ADMIN/USER), isTempPassword
+- ✅ `UserRepository` interface extending JpaRepository with findByUsername()
+- ✅ `PlanToPlateUserDetailsService` Spring Security UserDetailsService implementation
+- ✅ `BCryptPasswordEncoder` bean for password hashing
+- ✅ `TempPasswordInterceptor` filter redirecting temp-password users to reset page
+- ✅ `AuthenticationController` with login, logout, reset-password handlers
+- ✅ `SecurityConfig` with form login, logout, and temp password interceptor
+- ✅ Thymeleaf templates: login.html, reset-password.html, fragments/layout.html, index.html
+- ✅ UserService bean for user creation and admin seeding on startup
+- ✅ CommandLineRunner in PlanToPlateApplication to seed admin user at startup
+- ✅ All 6 tests passing (UserServiceBCryptTest: 5 assertions, PlanToPlateIntegrationTest: 1)
+- ✅ Maven BUILD SUCCESS
 
 ### Milestone 2: Relational Domain & Async Interface
 * [ ] **Task 3:** Composite Ingredient/Recipe Schema & Inline HTMX CRUD Engine
@@ -29,23 +43,5 @@
 ### Milestone 4: Governance & Seed Ingestion
 * [ ] **Task 7:** Admin Control Hub, Direct Schema Table Explorer, & Bulk JSON File Importer
 
-## Task 2 Completion Summary - Implemented Components
-
-| Component | Status | Description |
-|-----------|--------|-------------|
-| `User` Entity | ✅ Complete | JPA entity with id, username, passwordHash, role (ADMIN/USER), isTempPassword |
-| `UserRepository` | ✅ Complete | JpaRepository extending basic CRUD + findByUsername() method |
-| `PlanToPlateUserDetailsService` | ✅ Complete | Spring Security UserDetailsService implementation with BCrypt |
-| `BCryptPasswordEncoder` Bean | ✅ Complete | Password encoder bean registered in SecurityConfig |
-| `TempPasswordInterceptor` | ✅ Complete | Filter intercepting requests, redirects temp-password users to reset page |
-| `AuthenticationController` | ✅ Complete | Login, logout, reset-password GET/POST handlers with session management |
-| `SecurityConfig` | ✅ Complete | Spring Security configuration with filter chain, form login, logout setup |
-| `templates/login.html` | ✅ Complete | Thymeleaf login form with error/message attributes |
-| `templates/reset-password.html` | ✅ Complete | Thymeleaf password reset form with current/new password fields |
-| `templates/fragments/layout.html` | ✅ Complete | Master layout with navigation, content fragment (th:block), footer |
-| `templates/index.html` | ✅ Complete | Root page content for HTMX async rendering |
-| UserServiceBCryptTest | ✅ PASSING (5 tests) | Password hashing, username normalization, role handling, temp flag |
-| PlanToPlateIntegrationTest | ✅ PASSING (1 test) | End-to-end integration verification |
-
 ---
-*Last updated: Task 2 - All Task 2 deliverables [COMPLETE] / Maven Build & Test Suite Stable [6/6 tests PASS]*
+*Last updated: Task 2 COMPLETE / All Authentication Infrastructure Deliverables VERIFIED / Test Suite STABLE (6/6 tests PASSING)*
