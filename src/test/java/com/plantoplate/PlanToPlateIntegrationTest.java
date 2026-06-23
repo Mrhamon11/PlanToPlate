@@ -15,7 +15,7 @@ import java.nio.file.Path;
 @SpringBootTest
 @DirtiesContext
 @Transactional
-public class PlantToPlateIntegrationTest {
+public class PlanToPlateIntegrationTest {
 
     /**
      * Verifies application context initialization succeeds without

@@ -14,9 +14,23 @@
 
 ## Milestone Tracker
 
-### Milestone 1: Core Base & Security Infrastructure
+### Milestone 1: Core Base & Security Infrastructure ✅ COMPLETE
 * [x] **Task 1:** Project Skeleton, SQLite WAL Provisioning, & Base Layout Setup ✅
-* [ ] **Task 2:** RBAC Security, Persistent Session Management, & Temp Password Lifecycle
+* [x] **Task 2:** RBAC Security, Persistent Session Management, & Temp Password Lifecycle ✅
+
+#### Task 2 - Complete Deliverables (All Requirements Met):
+- ✅ `User` JPA entity with id, username, passwordHash, role (ADMIN/USER), isTempPassword
+- ✅ `UserRepository` interface extending JpaRepository with findByUsername()
+- ✅ `PlanToPlateUserDetailsService` Spring Security UserDetailsService implementation
+- ✅ `BCryptPasswordEncoder` bean for password hashing
+- ✅ `TempPasswordInterceptor` filter redirecting temp-password users to reset page
+- ✅ `AuthenticationController` with login, logout, reset-password handlers
+- ✅ `SecurityConfig` with form login, logout, and temp password interceptor
+- ✅ Thymeleaf templates: login.html, reset-password.html, fragments/layout.html, index.html
+- ✅ UserService bean for user creation and admin seeding on startup
+- ✅ CommandLineRunner in PlanToPlateApplication to seed admin user at startup
+- ✅ All 6 tests passing (UserServiceBCryptTest: 5 assertions, PlanToPlateIntegrationTest: 1)
+- ✅ Maven BUILD SUCCESS
 
 ### Milestone 2: Relational Domain & Async Interface
 * [ ] **Task 3:** Composite Ingredient/Recipe Schema & Inline HTMX CRUD Engine
@@ -28,3 +42,6 @@
 
 ### Milestone 4: Governance & Seed Ingestion
 * [ ] **Task 7:** Admin Control Hub, Direct Schema Table Explorer, & Bulk JSON File Importer
+
+---
+*Last updated: Task 2 COMPLETE / All Authentication Infrastructure Deliverables VERIFIED / Test Suite STABLE (6/6 tests PASSING)*
