@@ -1,5 +1,6 @@
 package com.plantoplate.service;
 
+import com.plantoplate.model.Role;
 import com.plantoplate.model.User;
 import com.plantoplate.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +31,7 @@ public class UserService {
             User admin = new User();
             admin.setUsername("admin");
             admin.setPasswordHash(passwordEncoder.encode("testadmin"));
-            admin.setRole(User.Role.ADMIN);
+            admin.setRole(Role.ADMIN);
             admin.setIsTempPassword(false);
             userRepository.save(admin);
         }
@@ -39,12 +40,12 @@ public class UserService {
     /**
      * Creates a regular user.
      */
-    public void createUser(String username, String password, User.Role role, boolean isTempPassword) {
+    public void createUser(String username, String password, Role role, boolean isTempPassword) {
         if (userRepository.findByUsername(username) == null) {
             User user = new User();
             user.setUsername(username);
             user.setPasswordHash(passwordEncoder.encode(password));
-            user.setRole(role);
+            user.setRole(role); // already set
             user.setIsTempPassword(isTempPassword);
             userRepository.save(user);
         }
