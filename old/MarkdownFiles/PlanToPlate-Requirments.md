@@ -76,35 +76,29 @@ This app is to provide the following functions to users:
 
 
 ### Tech Stack:
-I would like to make this a python Django application. the app needs to have a REST API though for clients to connect to. I am using this as a learning experience to help teach my Django, so I will rely on AI a bit when I'm stuck, which is why I'd like to create plan files.
+I'm open to any suggestions. I primarily work in Java and am familiar with relational databases. However, I have never written a web app before. I know this can be done with spring boot, but I'm open to python or javascript/typescript frameworks (I prefer Java, then Python, then Javascript/Typescript). the app needs to have a REST API though for clients to connect to.
+
 Here is are some suggestions for the tech stack, although I'd like to hear proposals from you. Please also include categories/components that are missing:
-  * Framework: Django
-  * DB: SQLite (as there will be very few users) although I'd like to have the option to switch to postgres at any time
+* Option 1:
+  * Language: Java
+  * Framework: Spring Boot + Vaadin
+  * DB: SQLite (as there will be very few users)
   * Protocol: REST
   * Platforms: Web via mobile or desktop (no native android/iOS app for now, but should be designed so that one can quickly utilize what already exists)
-  * Server: Local server (as there will be very few users), although I'd like to design this in a way where I can easily run this on an EC2 in AWS if needed.
+  * Server: Local server (as there will be very few users)
+* Option 2: 
+  * Language: Python
+  * Framework: Django
+  * DB: SQLite (as there will be very few users)
+  * Protocol: REST
+  * Platforms: Web via mobile or desktop (no native android/iOS app for now, but should be designed so that one can quickly utilize what already exists)
+  * Server: Local server (as there will be very few users)
 
 
 ### Request:
 * I would like a detailed plan on how to execute the above. It should include technical details and should contain all relevant information a developer or an AI model would need to execute. It should be broken down into logic steps and tasks. 
-* The code will primarily be written by me, but a local AI model running qwen-3.5-9b with Q4_K_M with a context window of roughly 50k tokens using the Pi.dev or the Continue extension will be used as well. However, I'd like to create a plan that can be executed as if an AI will write the whole thing. It will not be able to create this web app in one session, so in addition to a master PLAN.md file that contains all of the information to build this app, I would also like md files for each executable task that can be built by the local model. In an effort to reduce the amount of context needed when proceeding with later tasks, each task should create documentation of the API to give the model information about what has been created thus far without forcing it to read all of the code.
-* Create an AGENT.md that can be used as context for all prompts that does the following:
-  * Never does anything dangerous without asking first (e.g. deleting files, modifying large amount of code, running database scripts, etc)
-  * Never commits or pushes to git without my permission
-  * Assumes the role of an expert python, Django, html, css and javascript developer
-  * Assumes the role of an expert test creator (unit and integration)
-  * Expert in SQLite Concurrency Safeguards, and can help optimize sql queries that are not managed by Django
-  * Writes production ready code that is easy to read first, concise second
-  * Doesn't add excess comments to code
-* I'd like to work on the project with the following order for features:
-  * Milestone 1 - Ability to CRUD Ingredients and Recipes
-  * Milestone 2 - Ability to CRUD Lists
-  * Milestone 3 - Ability to CRUD Dishes
-  * Milestone 4 - Ability to CRUD RecipeBooks
-  * Milestone 5 - MealPlanner functionality
-  * Milestone 6 - Introduce login and multiple users (Admin panel should be baked into Django out of the box, but I'm not sure how much of the login work would need to be customized outside of the front end).
-  * Milestone 7 - User owned relationship of all Database objects
-  * Milestone 8 - Allow users to share their owned Database objects as read only copies
-  * Milestone 9 - Allow users to make copies of objects shared to them that are owned by them 
+* The code will primarily be written by a local AI model running qwen-3.5-9b with Q4_K_M with a context window of roughly 50k tokens using the Pi.dev agent. It will not be able to create this web app in one session, so in addition to an master PLAN.md file that contains all of the information to build this app, I would also like md files for each executable task that can be build by the local model. In an effort to reduce the amount of context needed when proceeding with later tasks, each task should create documentation of the API to give the model information about what has been created thus far without forcing it to read all of the code.
+* If possible, create a skill that would be suitable for this model/agent to ensure they are as efficient as possible. 
 * Before creating the plan md and skill files, please ensure you understand this entire document, and provide suggestions where I requested them. If a decision I've made doesn't seem correct (e.g. it's not architecturally sound), please let me know and suggest something new.
+* As mentioned above, we need a list of common ingredients as a starting point that we can mass import into the DB (using the admin panel). Please include a file that contains this data, ideally JSON with whatever properties you decide an Ingredient should have.
 * If you have any suggestions for other features, please let me know and we can talk it out. 
