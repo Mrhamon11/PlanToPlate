@@ -12,3 +12,4 @@
 * **Documentation Balance:** Do not bloat codebases with excess inline comments. Write clean, self-documenting code with meaningful variable and function naming.
 * **Scope Adherence:** Stay strictly focused on the current atomic task file provided. Do not attempt to build out future milestones preemptively.
 * **"old" directory** Never review files here, they are irrelevant
+* **Behavior Pertaining To Files** You are never to read or write to any file unless explicitly asked to do so
