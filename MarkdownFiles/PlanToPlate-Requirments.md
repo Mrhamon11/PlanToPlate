@@ -1,10 +1,10 @@
 # PlanToPlate Web App
 
-### High Level Goal:
+## High Level Goal:
 I would like to build a web app that will run on a local server in my apartment. I will likely expose it to certain people via a tailscale node or by using a reverse proxy, but ultimately, the number of people who will use this app is very limited (likely between 10-20 maximum, and likely not all at the same time).
 
 
-### MVP Functionality:
+## MVP Functionality:
 This app is to provide the following functions to users:
 * Ability to store Recipes in a database.
   * A Recipe is defined as a list of ingredients (that can themselves also be recipes), measurements for each ingredient (should allow many kinds of units) followed by a list of cooking instructions.
@@ -27,22 +27,22 @@ This app is to provide the following functions to users:
 * Should allow users to login and logout (see below)
 
 
-### Metrics and Properties:
+## Metrics and Properties:
 * Dishes and Recipes should contain the following metrics and properties:
   * Rating (out of 5 stars)
   * Favorite (to allow users to search/group objects by favorite)
   * How many times the object was made by the user
-  * A list of all users who have permission to see the object
+  * A list of all users who have permission to see the object (only available to the owner)
 
 
-### Login screen functionality:
+## Login screen functionality:
 * Users should be presented with the login screen when they first access the web page
 * Users should enter their provided username, when prompted
 * If a user is using a temp password, the login screen should prompt them to reset it and save that password (salted, not in plain text)
 * If a user is logged in, they should be able to stay logged in until they click the logout button, even if they close the web browser (similar to how other apps keep users signed in)
 
 
-### Admin controls and control center:
+## Admin controls and control center:
 * There should be an admin control panel to allow admins to do the following:
   * Create users with a temp password (users should not be able to create their own accounts) that is shown to the admin so they can share
   * Delete users
@@ -54,8 +54,8 @@ This app is to provide the following functions to users:
   * Admins should *not* be able to see an actual passwords (they should not be stored in plain text)
 
 
-### Nice to haves:
-* A recipe extractor that allows users to supply a link to an online recipe, and extract the recipe portion into a Recipe object. Users should be prompted to review and make edits if needed, and save the new Recipe to their Recipe DB.
+## Nice to haves:
+* A recipe extractor that allows users to supply a link to an online recipe, and extract the recipe portion into a Recipe object. Users should be prompted to review and make edits if needed, and save the new Recipe to their Recipe DB. Perhaps an AI agent can be deployed on demand to crawl a website and extract the relevant recipe information, and add it to the user's Recipe database (using some API the agent will have access to) 
 * Ability to add images to Recipes, Dishes, Lists, Ingredients and RecipeBooks via file upload
 * Be optimized for mobile and desktop usage:
   * All windows should look good in either format
@@ -75,20 +75,28 @@ This app is to provide the following functions to users:
   * If a user is seeing a post containing a DB object, they should be able make a copy from that page (see copy rules above) as the post defined the audience field
 
 
-### Tech Stack:
-I would like to make this a python Django application. the app needs to have a REST API though for clients to connect to. I am using this as a learning experience to help teach my Django, so I will rely on AI a bit when I'm stuck, which is why I'd like to create plan files.
+## Tech Stack:
+I would like to make this a python Django application. the app needs to have a REST API though for clients to connect to. I am using this as a learning experience to help teach me Django, but I will rely on AI quite a bit when I'm stuck, which is why I'd like to create plan files.
 Here is are some suggestions for the tech stack, although I'd like to hear proposals from you. Please also include categories/components that are missing:
   * Framework: Django
   * DB: SQLite (as there will be very few users) although I'd like to have the option to switch to postgres at any time
   * Protocol: REST
   * Platforms: Web via mobile or desktop (no native android/iOS app for now, but should be designed so that one can quickly utilize what already exists)
-  * Server: Local server (as there will be very few users), although I'd like to design this in a way where I can easily run this on an EC2 in AWS if needed.
+  * Server: Local server (as there will be very few users), although I'd like to design this in a way where I can easily run this on an EC2 in AWS or on a VPS somewhere if needed.
 
 
 ### Request:
 * I would like a detailed plan on how to execute the above. It should include technical details and should contain all relevant information a developer or an AI model would need to execute. It should be broken down into logic steps and tasks. 
-* The code will primarily be written by me, but a local AI model running qwen-3.5-9b with Q4_K_M with a context window of roughly 50k tokens using the Pi.dev or the Continue extension will be used as well. However, I'd like to create a plan that can be executed as if an AI will write the whole thing. It will not be able to create this web app in one session, so in addition to a master PLAN.md file that contains all of the information to build this app, I would also like md files for each executable task that can be built by the local model. In an effort to reduce the amount of context needed when proceeding with later tasks, each task should create documentation of the API to give the model information about what has been created thus far without forcing it to read all of the code.
-* Create an AGENT.md that can be used as context for all prompts that does the following:
+* The code will primarily be written by me and claude code. However, I'd like to create a plan that can be executed as if an AI will write the whole thing. It will not be able to create this web app in one session. The files I need created are:
+    * A milestones/living document that gives includes the project details, requirements, and any other context that would be good for an AI agent to read on each session to understand the project and what has been completed thus far.
+    * 3 files per task that can be broken down into subtasks. The files include:
+        * A design file that contains the design and implementation details for this task
+        * A tasks file that contains the break down of the subtasks that comprise this task
+        * A test plan file that contains all tests that need to be written and passing for the task to be considered complete.
+        * The above three files hsould reference each other to give context to an AI
+        * A requirement of this each task should be to read the milestones/living document when starting, and updating it when the task is complete. 
+        * Add a new folder in the root of the project directory called "Plan". The milestones/living document should live there, and then you should create separate folders for each task. Inside those subfolders, the above three described plan files should be created.
+* Create an CLAUDE.md that can be used as context for all prompts that does the following:
   * Never does anything dangerous without asking first (e.g. deleting files, modifying large amount of code, running database scripts, etc)
   * Never commits or pushes to git without my permission
   * Assumes the role of an expert python, Django, html, css and javascript developer
@@ -96,15 +104,15 @@ Here is are some suggestions for the tech stack, although I'd like to hear propo
   * Expert in SQLite Concurrency Safeguards, and can help optimize sql queries that are not managed by Django
   * Writes production ready code that is easy to read first, concise second
   * Doesn't add excess comments to code
-* I'd like to work on the project with the following order for features:
-  * Milestone 1 - Ability to CRUD Ingredients and Recipes
-  * Milestone 2 - Ability to CRUD Lists
-  * Milestone 3 - Ability to CRUD Dishes
-  * Milestone 4 - Ability to CRUD RecipeBooks
-  * Milestone 5 - MealPlanner functionality
-  * Milestone 6 - Introduce login and multiple users (Admin panel should be baked into Django out of the box, but I'm not sure how much of the login work would need to be customized outside of the front end).
-  * Milestone 7 - User owned relationship of all Database objects
-  * Milestone 8 - Allow users to share their owned Database objects as read only copies
-  * Milestone 9 - Allow users to make copies of objects shared to them that are owned by them 
-* Before creating the plan md and skill files, please ensure you understand this entire document, and provide suggestions where I requested them. If a decision I've made doesn't seem correct (e.g. it's not architecturally sound), please let me know and suggest something new.
+  * Only lives in this project (i.e. don't update the global CLAUDE.md file)
+* A series of agents/agent files that have the following personas and pipelines, and live only within this project:
+    * Agents:
+        * p2p-dev -> should be tasked with new development tasks (used whenever implement, develop, etc) is in the prompt. Should use sonnet 5 for the model.
+        * p2p-tester -> should be tasked with running all tests and comparing the existing tests against the test plan file. Should use opus
+        * p2p-reviewer -> should be tasked with reviewing the code that dev agent wrote. Needs to validate the tests make sense, the design is sound (and matches the plan files), and there are no bugs. Use opus for this agent.
+    * Pipeline:
+        * p2p-dev -> p2p-tester -> p2p-reviewer -> notify me to look at code and approve
+        * If either p2p-tester or p2p-reviewer find issues, it should go back to p2p-dev to address and start the cycle again.
+        * Multiple p2p-reviewers can be dispatched if needed.
+* Before creating the plan  files, please ensure you understand this entire document, and provide suggestions where I requested them. If a decision I've made doesn't seem correct (e.g. it's not architecturally sound), please let me know and suggest something new.
 * If you have any suggestions for other features, please let me know and we can talk it out. 
