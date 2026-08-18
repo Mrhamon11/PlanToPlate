@@ -8,8 +8,32 @@ architecture and decision log.
 
 This is the whole setup. Nothing here needs a step that isn't written down.
 
-**Prerequisites:** Docker and Docker Compose on the target machine (a home server, a Pi, a
-VPS — anything that runs Docker).
+**Prerequisites**
+
+1. **Docker and Docker Compose** on the target machine (a home server, a Pi, a VPS — anything
+   that runs Docker).
+2. **Your user must be able to reach the Docker daemon.** If `docker ps` fails with
+   `permission denied ... /var/run/docker.sock`, add yourself to the `docker` group:
+
+   ```bash
+   sudo usermod -aG docker $USER
+   newgrp docker        # applies the group to *this* shell without logging out
+   ```
+
+   `usermod` alone does not affect shells that are already open — either run `newgrp docker`
+   in each one, or log out and back in for it to apply everywhere.
+3. **The system clock must be synchronised.** The image build installs Debian packages, and
+   apt rejects repository metadata that is timestamped in the future relative to the build
+   host. A clock running behind real time therefore fails the build with
+   `Release file ... is not valid yet`. Check and fix before building:
+
+   ```bash
+   timedatectl                      # want: System clock synchronized: yes
+   sudo chronyc makestep            # force an immediate sync if it says no
+   ```
+
+   The mirror-image symptom, `Release file ... is expired`, means the clock is running ahead.
+   Both are host clock problems, not repository problems.
 
 ```bash
 git clone <this repository> plantoplate
@@ -120,6 +144,41 @@ important on SQLite, where a force-kill mid-write is how a database gets corrupt
 `GET /healthz/` returns `{"status": "ok", "database": "ok"}` backed by a real database
 round-trip. Docker Compose uses it to decide whether the `app` service is actually healthy,
 not merely running; Caddy only starts routing to it once that check passes.
+
+### Verifying a deployment
+
+After `docker compose up`, these four checks confirm the stack is genuinely working rather
+than merely running:
+
+```bash
+docker compose ps                      # app should read "healthy", not just "up"
+curl -k https://localhost/healthz/     # {"status": "ok", "database": "ok"}
+docker compose logs app | tail -20     # migrate -> collectstatic -> "Starting gunicorn."
+```
+
+Then confirm the data actually persists, which is the failure that matters most on a
+self-hosted box:
+
+```bash
+docker compose down && docker compose up -d
+docker compose logs app | grep -i "first-run\|already recorded"
+```
+
+The database survives, and each first-run command reports either that it is skipped (not
+implemented yet) or already recorded done. It must never re-seed.
+
+### If the stack does not come up
+
+- **`app` never becomes `healthy`, and Caddy never starts.** Almost always `ALLOWED_HOSTS`.
+  The healthcheck reaches gunicorn on `127.0.0.1`, so Django rejects the request with 400 if
+  that host is not allowed — and because Caddy waits on `service_healthy`, nothing gets
+  served at all. `prod.py` appends `127.0.0.1` for you, so this should not happen; if it
+  does, check `docker compose logs app` for `Invalid HTTP_HOST header`.
+- **Build fails with `Release file ... is not valid yet`.** Host clock, not the build. See
+  prerequisite 3 above.
+- **`permission denied` on the Docker socket.** See prerequisite 2 above.
+- **App exits immediately on boot.** Check `SECRET_KEY` is actually set in `.env` — it has no
+  default and the app refuses to start without one.
 
 ## Local development
 
