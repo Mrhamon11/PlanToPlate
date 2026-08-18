@@ -1,0 +1,91 @@
+# Docker Compose stack for a single home-server deployment: the Django app behind Caddy,
+# which handles TLS automatically (a real public SITE_ADDRESS gets a Let's Encrypt cert; the
+# "localhost" default gets Caddy's internal self-signed CA — either way requests arrive at
+# Django already HTTPS, which SECURE_SSL_REDIRECT and SECURE_PROXY_SSL_HEADER expect).
+#
+# First deployment: cp .env.example .env && make secret (fills in SECRET_KEY), then
+# docker compose up. See README.md for the full walkthrough.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Selects the optional `postgres` dependency group (psycopg[binary]) at image build
+        # time. Default build stays SQLite-only. Set INCLUDE_POSTGRES=true in .env before
+        # `docker compose build`/`up` when switching to the `postgres` service below — the
+        # image has to be rebuilt with the driver in it; DATABASE_URL alone is not enough.
+        INCLUDE_POSTGRES: ${INCLUDE_POSTGRES:-false}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Points the SQLite file at the named volume below rather than base.py's default
+      # (BASE_DIR/db.sqlite3, which would land on the container's writable layer and be lost
+      # on every recreate). Overridden by DATABASE_URL in .env when pointing at Postgres —
+      # see the commented `postgres` service.
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/db.sqlite3}
+    volumes:
+      - plantoplate_data:/app/data
+      - plantoplate_media:/app/media
+    healthcheck:
+      # No curl/wget in the slim runtime image; urllib avoids adding one just for this.
+      # Hits gunicorn directly on its container port, bypassing Caddy — see prod.py's
+      # SECURE_REDIRECT_EXEMPT comment for why /healthz/ must answer here without TLS.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz/', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Uncomment to switch the database engine. Three things change, all in .env — this file's
+  # app service already reads them, so nothing else here needs editing:
+  #   1. INCLUDE_POSTGRES=true, so the app image is rebuilt with the psycopg[binary] driver
+  #      (the `postgres` dependency group — see the Dockerfile's INCLUDE_POSTGRES build arg).
+  #   2. DATABASE_URL=postgres://plantoplate:<password>@postgres:5432/plantoplate
+  #   3. POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD, matching the URL above.
+  # Then `docker compose up --build` to pick up both the new image and this service.
+  #
+  # postgres:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: ${POSTGRES_DB:-plantoplate}
+  #     POSTGRES_USER: ${POSTGRES_USER:-plantoplate}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+  #   volumes:
+  #     - plantoplate_postgres:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-plantoplate}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  plantoplate_data:
+  plantoplate_media:
+  caddy_data:
+  caddy_config:
+  # plantoplate_postgres:

@@ -1,0 +1,9 @@
+# {$SITE_ADDRESS} defaults to "localhost" (see compose.yaml). Caddy's automatic HTTPS
+# recognizes that "localhost" cannot get a public certificate and issues one from its own
+# internal CA instead — no extra directive needed. Point SITE_ADDRESS at a real domain in
+# .env for a publicly trusted Let's Encrypt certificate; nothing else in this file changes.
+{$SITE_ADDRESS:localhost} {
+	encode gzip
+
+	reverse_proxy app:8000
+}

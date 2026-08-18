@@ -70,7 +70,7 @@ Not automated; the implementer performs these and reports the results.
       step beyond `.env` + `make secret` (manual checks #3–#5).
 - [ ] Data survives restart and `down`/`up`; shutdown is graceful.
 - [ ] No database, `.env`, or `.venv` is baked into the image (manual check #7).
-- [ ] The Postgres migration run in Manual Verification #8 succeeded.
+- [x] The Postgres migration run in Manual Verification #8 succeeded.
 - [ ] `README.md` documents the full from-nothing deployment path.
 - [ ] `.env` gitignored, `.env.example` committed, no secret in any tracked file.
 - [ ] Subtasks ticked; `../MILESTONES.md` updated.
