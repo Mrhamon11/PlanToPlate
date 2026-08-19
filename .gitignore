@@ -6,21 +6,34 @@ old/plantoplate.db
 *.db
 *.db-shm
 *.db-wal
+db.sqlite3
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 plantoplate_data/
 app/data/
+media/
 
 # ==========================================
-# 2. Build & Target Outputs (Maven / Gradle)
+# 1b. Python / Django / uv
 # ==========================================
-target/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+staticfiles/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ruff_cache/
+
+# ==========================================
+# 2. Build & Packaging Outputs
+# ==========================================
 build/
-out/
-.gradle/
-bin/
-*.class
-*.jar
-*.war
-*.ear
+dist/
+*.egg-info/
 
 # ==========================================
 # 3. IntelliJ IDEA Configuration
@@ -51,11 +64,9 @@ Desktop.ini
 # ==========================================
 # 5. Environment & Sensitive Configuration
 # ==========================================
-# Local application overrides (use application-local.yml for machine-specific values)
-src/main/resources/application-local.yml
-src/main/resources/application-local.properties
 .env
 .env.*
+!.env.example
 *.log
 logs/
 
@@ -68,3 +79,10 @@ logs/
 .history/
 *.swp
 *.bak
+
+# ==========================================
+# 8. p2p pipeline working files
+# ==========================================
+# Per-run review findings. Transient: the pipeline deletes it at the start of
+# each task run. Anything durable belongs in Plan/MILESTONES.md's decision log.
+Plan/**/.review-findings.md

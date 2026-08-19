@@ -1,0 +1,91 @@
+[project]
+name = "plantoplate"
+version = "0.1.0"
+description = "Self-hosted recipe, meal-planning and shopping-list app."
+readme = "README.md"
+authors = [
+    { name = "MrHamon11", email = "aviamon11@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "django>=5.1,<6",
+    "django-environ>=0.14.0",
+    "django-filter>=26.1",
+    "djangorestframework>=3.18.0",
+    "drf-spectacular>=0.30.0",
+    "whitenoise>=6.12.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "django-debug-toolbar>=7.1.1",
+    "factory-boy>=3.3.3",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-django>=4.14.0",
+    "pyyaml>=6.0.3",
+    "ruff>=0.16.3",
+]
+postgres = [
+    "psycopg[binary]>=3.3.4",
+]
+prod = [
+    "gunicorn>=26.1.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+addopts = "--strict-markers --cov=. --cov-report=term-missing"
+strict_markers = true
+
+[tool.coverage.run]
+branch = true
+omit = [
+    "*/migrations/*",
+    "manage.py",
+    "*/tests/*",
+    "conftest.py",
+    ".venv/*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# Plan/ and MarkdownFiles/ hold project documentation with embedded Python examples, not code
+# to lint or format; .claude/ is Claude Code tooling maintained outside this app.
+# extend-exclude, not exclude: `exclude` REPLACES ruff's built-in defaults (.venv, .git,
+# __pycache__, build, dist, ...), so without `extend-` those would be linted too — only
+# respect_gitignore was masking that locally, and a Docker build context has no .git to
+# respect.
+extend-exclude = ["migrations", ".claude", "Plan", "MarkdownFiles"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "DJ", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Settings modules star-import from base.py by design — F403/F405 misfire on the intentional
+# `from .base import *`. S105 (hardcoded-password-ish string checks) stays ENABLED here on
+# purpose: this is exactly the directory where a committed secret does the most damage. The
+# one legitimate S105 site (config/settings/test.py) carries its own inline `# noqa: S105`.
+"config/settings/*.py" = ["F403", "F405"]
+# Test modules legitimately use asserts, hardcoded test passwords, subprocesses with fixed
+# trusted arguments (never user input), and reach into internals.
+"**/tests/*.py" = ["S101", "S105", "S106", "S603"]
+"conftest.py" = ["S101", "S105", "S106"]
+"tests/*.py" = ["S101", "S105", "S106", "S603"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "config",
+    "core",
+    "accounts",
+    "catalog",
+    "recipes",
+    "meals",
+    "lists",
+    "planner",
+]
