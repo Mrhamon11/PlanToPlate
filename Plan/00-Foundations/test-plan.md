@@ -62,15 +62,15 @@ Not automated; the implementer performs these and reports the results.
 
 ## Definition of Done
 
-- [ ] `uv run pytest` — all green, no skips.
-- [ ] `ruff check .` and `ruff format --check .` — clean.
-- [ ] `manage.py check --deploy` under **prod** settings — zero warnings.
-- [ ] `makemigrations --check` — nothing pending.
-- [ ] A **clean-machine deploy against an empty volume** comes up fully working with no manual
+- [x] `uv run pytest` — all green, no skips.
+- [x] `ruff check .` and `ruff format --check .` — clean.
+- [x] `manage.py check --deploy` under **prod** settings — zero warnings.
+- [x] `makemigrations --check` — nothing pending.
+- [x] A **clean-machine deploy against an empty volume** comes up fully working with no manual
       step beyond `.env` + `make secret` (manual checks #3–#5).
-- [ ] Data survives restart and `down`/`up`; shutdown is graceful.
-- [ ] No database, `.env`, or `.venv` is baked into the image (manual check #7).
+- [x] Data survives restart and `down`/`up`; shutdown is graceful.
+- [x] No database, `.env`, or `.venv` is baked into the image (manual check #7).
 - [x] The Postgres migration run in Manual Verification #8 succeeded.
-- [ ] `README.md` documents the full from-nothing deployment path.
-- [ ] `.env` gitignored, `.env.example` committed, no secret in any tracked file.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated.
+- [x] `README.md` documents the full from-nothing deployment path.
+- [x] `.env` gitignored, `.env.example` committed, no secret in any tracked file.
+- [x] Subtasks ticked; `../MILESTONES.md` updated.
