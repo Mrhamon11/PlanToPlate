@@ -79,3 +79,10 @@ logs/
 .history/
 *.swp
 *.bak
+
+# ==========================================
+# 8. p2p pipeline working files
+# ==========================================
+# Per-run review findings. Transient: the pipeline deletes it at the start of
+# each task run. Anything durable belongs in Plan/MILESTONES.md's decision log.
+Plan/**/.review-findings.md
