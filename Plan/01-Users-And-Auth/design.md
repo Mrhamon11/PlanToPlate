@@ -46,16 +46,66 @@ the entire account-enumeration and email-deliverability surface.
 3. On successful login with `must_change_password=True`, every request is redirected to
    `/accounts/password/change/` until it is done. Enforced by **middleware**, not by
    remembering to check in each view — a per-view check is a per-view chance to forget.
-4. On a successful change: clear both fields, and **cycle the session key**
-   (`update_session_auth_hash`) so any pre-existing session is invalidated.
+
+   **This does not extend to token-authenticated API requests.** DRF's `TokenAuthentication`
+   (enabled in 01.7) authenticates inside `APIView.initial()`, which runs *after*
+   `ForcePasswordChangeMiddleware`. At the point the middleware runs, `request.user` is still
+   `AnonymousUser` for a token-bearing request, so it sails straight through and a
+   `must_change_password=True` user with a valid token gets unrestricted API access. 01.7 needs
+   a DRF-side counterpart — a permission class, or a `DEFAULT_PERMISSION_CLASSES` entry — to
+   close this gap; middleware alone cannot reach it.
+4. On a successful change, `set_password` alone invalidates every existing session for the
+   user, including the one making the request: changing the stored hash also changes
+   `User.get_session_auth_hash()`, so the next request's `django.contrib.auth.get_user()` fails
+   `constant_time_compare` against the session's stored hash and calls
+   `request.session.flush()`, deleting the session row outright. This is **stronger** than
+   `update_session_auth_hash` — that call spares only the *current* session while killing
+   others; a bare `set_password` kills all of them, the acting user's included. Because of
+   that, **01.6's password-change view must call `update_session_auth_hash(request, user)`
+   immediately after `complete_password_change`** — the service has no `request` to do this
+   itself — or the forced-reset flow ends by flushing the very session that just completed it,
+   bouncing the user back to the login screen instead of into the app.
 5. An expired temp password refuses login with "This temporary password has expired. Ask an
-   admin to issue a new one." — it does not silently work forever.
+   admin to issue a new one." — it does not silently work forever. This check does **not**
+   belong in `LoginView`: Django's `authenticate()` succeeds against an expired temp password
+   regardless of what a view does with the result, so anything else that calls `authenticate()`
+   — `/admin/login/`, reachable today, and 01.7's API login — would still let it in. The choke point
+   for *enforcement* is a `ModelBackend` subclass overriding `user_can_authenticate`, since
+   every `authenticate()` call path already consults that method. It also gates
+   `ModelBackend.get_user()`, so the override ends an expired user's already-open sessions,
+   not just their new logins.
+
+   **Enforcement and the message are separate layers, and the backend cannot carry both.**
+   `user_can_authenticate` returning `False` makes `authenticate()` return `None`, and
+   `AuthenticationForm.clean` answers `None` with the generic "Please enter a correct username
+   and password" — `confirm_login_allowed()` never runs, since it only runs when
+   `authenticate()` returned a user. Raising `PermissionDenied` in the backend does not help
+   either; `authenticate()` swallows it and returns `None`. So 01.6 must supply the message
+   from the form layer: an `AuthenticationForm` subclass that, on an invalid login, re-checks
+   `user.check_password(password) and temp_password_expired(user)` and substitutes the expiry
+   text. This is not the enumeration oracle "Edge cases" warns about — it is reachable only by
+   someone who already has the correct password.
+
+   The backend is **not** a choke point for DRF `TokenAuthentication` (01.7), which never calls
+   `authenticate()`. There, expiry is covered only transitively: an expired temp password
+   implies `must_change_password=True`, which the API's own guard must enforce.
+
+   The rule itself belongs in `accounts/services.py`, per `CLAUDE.md` §3, as something like
+   `temp_password_expired(user) -> bool`, not written inline in the backend or a view. Pin its semantics:
+   `temp_password_expires_at is None` **with** `must_change_password=True` — reachable by an
+   admin ticking `must_change_password` by hand in Django Admin without also setting an expiry
+   — means "forced change, no deadline," not "expired."
 
 ### The middleware
 
 `accounts.middleware.ForcePasswordChangeMiddleware`. Redirects authenticated users with
 `must_change_password=True` to the change form. **Exempt paths:** the change form itself,
-logout, `/healthz/`, and static/media — without those exemptions the redirect loops.
+logout, `/healthz/`, static/media, and `POST /api/auth/password/change/` — without the first
+group the redirect loops, and without the last one a temp-password API client gets `403
+{"detail": "password_change_required"}` on every request, including the one request that would
+clear the condition, leaving it no reachable way out. The API exemption must match the
+**exact path** `/api/auth/password/change/`, not an `/api/auth/` prefix — a prefix match would
+also exempt `/api/auth/me/` and every other authenticated endpoint from enforcement.
 
 For API requests (`/api/`) it returns `403` with a machine-readable
 `{"detail": "password_change_required"}` rather than a redirect, because a REST client cannot

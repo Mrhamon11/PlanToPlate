@@ -24,6 +24,8 @@ STORAGES = {
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 SECURE_SSL_REDIRECT = True
+# Dev runs over plain HTTP, so this stays out of base.py — a Secure cookie there would never
+# come back from the browser and would silently break local login.
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
