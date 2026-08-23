@@ -38,8 +38,15 @@
 
 - [ ] **01.7 — API auth endpoints**
   `login`, `logout`, `me`, `password/change` under `/api/auth/`, with serializers.
-  *Files:* `accounts/api.py`, `accounts/serializers.py`, `accounts/urls.py`
-  *Done when:* all four appear in `/api/docs/` and round-trip correctly.
+  Also enable `TokenAuthentication` here — deferred from task 00 per decision D9. Add
+  `rest_framework.authtoken` to `INSTALLED_APPS` and append `TokenAuthentication` to the
+  existing `DEFAULT_AUTHENTICATION_CLASSES` list in `config/settings/base.py`, which task 00
+  deliberately left at `SessionAuthentication` only. Its migration declares an FK to
+  `AUTH_USER_MODEL`, so it must land after 01.1, never before.
+  *Files:* `accounts/api.py`, `accounts/serializers.py`, `accounts/urls.py`,
+  `config/settings/base.py`
+  *Done when:* all four appear in `/api/docs/` and round-trip correctly, and a minted token
+  authenticates an API request while `BasicAuthentication` remains disabled.
 
 - [ ] **01.8 — Login throttling**
   `ScopedRateThrottle` at `5/min` on both login paths.

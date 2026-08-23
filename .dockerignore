@@ -1,0 +1,38 @@
+# Never bake a host virtualenv into the image — its paths and interpreter are wrong for the
+# container, and the runtime stage builds its own venv from uv.lock instead.
+.venv/
+
+# Local data and secrets. Copying these into a layer bakes them into the image permanently,
+# even if a later layer deletes them.
+db.sqlite3
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.env
+.env.*
+!.env.example
+media/
+
+.git/
+.github/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ruff_cache/
+staticfiles/
+
+# Editor / OS artifacts
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Documentation and planning — not needed at runtime, and ruff/pytest already exclude them
+Plan/
+MarkdownFiles/
+.claude/
+README.md
