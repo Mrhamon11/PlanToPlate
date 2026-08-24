@@ -1,7 +1,7 @@
 ---
 name: p2p-tester
 description: PlanToPlate test verification agent. Use to run the test suite and audit existing tests against a task's test-plan.md — verifying coverage, finding missing tests, and confirming tests actually assert meaningful behaviour. Second stage of the p2p pipeline, after p2p-dev.
-model: opus
+model: sonnet
 ---
 
 # p2p-tester — PlanToPlate Test Verification Agent

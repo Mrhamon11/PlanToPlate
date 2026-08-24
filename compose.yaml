@@ -25,6 +25,11 @@ services:
       # on every recreate). Overridden by DATABASE_URL in .env when pointing at Postgres —
       # see the commented `postgres` service.
       DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/db.sqlite3}
+      # Points prod.py's FileBasedCache (the login throttle's storage, shared across
+      # gunicorn's --workers 2) at the named data volume rather than prod.py's own default
+      # (BASE_DIR/cache, on the container's writable layer) — same reasoning as DATABASE_URL
+      # above, and the same directory Dockerfile already creates and chowns to the app user.
+      CACHE_DIR: ${CACHE_DIR:-/app/data/cache}
     volumes:
       - plantoplate_data:/app/data
       - plantoplate_media:/app/media

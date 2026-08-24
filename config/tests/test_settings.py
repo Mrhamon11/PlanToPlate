@@ -222,9 +222,11 @@ def test_drf_defaults_deny_by_default():
     from rest_framework.permissions import AllowAny, IsAuthenticated
     from rest_framework.settings import api_settings
 
+    from accounts.permissions import ForcePasswordChangeAPIPermission
+
     resolved = api_settings.DEFAULT_PERMISSION_CLASSES
 
-    assert resolved == [IsAuthenticated], resolved
+    assert resolved == [IsAuthenticated, ForcePasswordChangeAPIPermission], resolved
     assert AllowAny not in resolved
 
 
@@ -255,6 +257,52 @@ def test_drf_does_not_enable_basic_authentication():
     assert SessionAuthentication in resolved
 
 
+def test_prod_sets_num_proxies_for_throttle_ident():
+    """Without this, DRF's ``ScopedRateThrottle`` keys on the entire client-supplied
+    ``X-Forwarded-For`` header rather than the one hop Caddy itself appends — reproduced live
+    in review as a complete login-throttle bypass via a rotating header. Prod-only: under
+    ``runserver`` with no proxy in front, ``NUM_PROXIES=1`` would trust the *last* entry of a
+    header that is still entirely attacker-controlled, which is no improvement at all.
+    """
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={"SECRET_KEY": "x" * 50, "ALLOWED_HOSTS": "example.com"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["REST_FRAMEWORK"]["NUM_PROXIES"] == 1
+
+
+def test_base_and_test_settings_leave_num_proxies_unset():
+    """dev/test must keep DRF's default (``REMOTE_ADDR``-only, no proxy hop trusted) — setting
+    ``NUM_PROXIES`` outside of prod would trust a header nothing here actually strips or
+    overwrites.
+    """
+    assert "NUM_PROXIES" not in settings.REST_FRAMEWORK
+
+
+def test_prod_cache_is_shared_across_worker_processes():
+    """``docker-entrypoint.sh`` starts gunicorn with ``--workers 2``. Django's unconfigured
+    default, ``LocMemCache``, is per-process — reproduced in review as the login throttle
+    silently enforcing 10/min instead of design.md's 5/min, with counters reset by any worker
+    recycle. ``FileBasedCache`` needs no new dependency and no database table (unlike
+    ``DatabaseCache``, which needs ``createcachetable`` — a data-mutating command outside this
+    task's authorisation).
+    """
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={"SECRET_KEY": "x" * 50, "ALLOWED_HOSTS": "example.com"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert (
+        data["CACHES"]["default"]["BACKEND"]
+        == "django.core.cache.backends.filebased.FileBasedCache"
+    )
+
+
 def test_prod_does_not_reenable_basic_authentication():
     """prod.py star-imports base, but must not override REST_FRAMEWORK to add Basic back."""
     result = _import_settings_module(
@@ -265,4 +313,8 @@ def test_prod_does_not_reenable_basic_authentication():
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     auth_classes = data["REST_FRAMEWORK"]["DEFAULT_AUTHENTICATION_CLASSES"]
-    assert auth_classes == ["rest_framework.authentication.SessionAuthentication"]
+    assert auth_classes == [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
+    ]
+    assert "rest_framework.authentication.BasicAuthentication" not in auth_classes

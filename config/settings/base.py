@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework.authtoken",
     "django_filters",
     "drf_spectacular",
     "core",
@@ -57,6 +58,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Must come after AuthenticationMiddleware — it reads request.user.
+    "accounts.middleware.ForcePasswordChangeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -115,6 +118,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 10},
     },
     {
         "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
@@ -154,12 +158,32 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+AUTH_USER_MODEL = "accounts.User"
+
+# TempPasswordAwareBackend wraps ModelBackend to reject an expired temp password at
+# user_can_authenticate() — every authenticate() call path (the login view, /admin/login/,
+# the API login) consults that method, which makes it the one choke point that reaches all
+# three. See accounts/backends.py and Plan/01-Users-And-Auth/design.md, "Temp password flow"
+# step 5. Replaces the default ModelBackend entirely rather than adding alongside it — the
+# subclass is a strict superset of ModelBackend's own checks.
+AUTHENTICATION_BACKENDS = ["accounts.backends.TempPasswordAwareBackend"]
+
+LOGIN_URL = "accounts:login"
+# There is no dedicated "home" page until task 02 (UI Shell) lands — the profile view is the
+# nearest thing to one today, so both settings point there.
+LOGIN_REDIRECT_URL = "accounts:profile"
+LOGOUT_REDIRECT_URL = "accounts:login"
+
 
 # Authentication
 # Session cookies, not JWT — see MILESTONES.md for the rationale. SESSION_SAVE_EVERY_REQUEST
-# plus a one-year age satisfies "stay logged in until logout."
+# plus a one-year age satisfies "stay logged in until logout." SESSION_COOKIE_SECURE is prod
+# only (config/settings/prod.py) — dev runs over plain HTTP and a Secure cookie would never
+# be sent back by the browser, silently breaking local login.
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 365
 SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 
@@ -170,14 +194,19 @@ SESSION_COOKIE_SAMESITE = "Lax"
 REST_FRAMEWORK = {
     # Explicit on purpose: DRF's built-in default is [SessionAuthentication,
     # BasicAuthentication], which would silently accept Authorization: Basic on every
-    # endpoint with no throttle guarding it. MILESTONES.md lists only sessions and (later)
-    # TokenAuthentication. TokenAuthentication is appended in task 01 — its migration needs
-    # an FK to AUTH_USER_MODEL, which does not exist until the custom User model lands.
+    # endpoint with no throttle guarding it. MILESTONES.md lists only sessions and
+    # TokenAuthentication — BasicAuthentication is never enabled.
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
+        # ForcePasswordChangeMiddleware never sees a token-authenticated request's real user —
+        # DRF authenticates inside APIView.initial(), after middleware runs. This permission is
+        # the DRF-side counterpart that closes that gap. See accounts/permissions.py and
+        # design.md, "Temp password flow" step 3.
+        "accounts.permissions.ForcePasswordChangeAPIPermission",
     ],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -185,6 +214,19 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Login throttling (01.8, design.md "Login throttling"): keyed on IP via
+    # ScopedRateThrottle, applied to all three credential-accepting login paths —
+    # /api/auth/login/ (accounts/api.py), the HTML login view (accounts/views.py's
+    # ThrottledLoginMixin), and /admin/login/ (accounts/views.py's throttled_admin_login,
+    # wired in ahead of admin.site.urls in config/urls.py). All three share one bucket, so an
+    # attacker cannot dodge the budget by switching endpoints. Deliberately does not lock the
+    # account — accounts are admin-provisioned with no self-service recovery, so a throttle
+    # that locked accounts would hand an attacker a free denial-of-service lever. In
+    # production this also depends on NUM_PROXIES and CACHES, both set in prod.py only — see
+    # that file's comments for why neither belongs here.
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "5/min",
+    },
 }
 
 SPECTACULAR_SETTINGS = {
@@ -195,5 +237,14 @@ SPECTACULAR_SETTINGS = {
     # drf-spectacular serves the schema and Swagger UI to AllowAny by default, which would
     # override the default-deny above and publish the full API shape anonymously. There is no
     # anonymous access anywhere in this app (MILESTONES.md section 4).
-    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    #
+    # SpectacularAPIView/SwaggerView set permission_classes = SERVE_PERMISSIONS directly, which
+    # *replaces* DEFAULT_PERMISSION_CLASSES rather than extending it — so
+    # ForcePasswordChangeAPIPermission has to be listed again here, or /api/schema/ and
+    # /api/docs/ become the only endpoints in the project where a must_change_password=True
+    # token holder gets unrestricted access.
+    "SERVE_PERMISSIONS": [
+        "rest_framework.permissions.IsAuthenticated",
+        "accounts.permissions.ForcePasswordChangeAPIPermission",
+    ],
 }
