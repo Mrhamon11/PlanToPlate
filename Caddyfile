@@ -5,5 +5,15 @@
 {$SITE_ADDRESS:localhost} {
 	encode gzip
 
-	reverse_proxy app:8000
+	reverse_proxy app:8000 {
+		# Overwrites X-Forwarded-For with the real peer address instead of Caddy's default
+		# of appending to whatever the client already sent — a client-supplied header would
+		# otherwise let an attacker defeat the login throttle's IP-based key by rotating
+		# this header on every request (config/settings/prod.py's NUM_PROXIES=1 is
+		# belt-and-braces against the same attack; this directive removes the
+		# attacker-controlled entry entirely rather than relying on DRF to skip past it).
+		# header_up is a reverse_proxy subdirective: at site-block level Caddy rejects the
+		# whole file as an unrecognized directive and the container crash-loops.
+		header_up X-Forwarded-For {remote_host}
+	}
 }

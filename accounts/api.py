@@ -15,9 +15,11 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from accounts.serializers import LoginSerializer, PasswordChangeSerializer, UserSerializer
+from accounts.throttling import LOGIN_THROTTLE_SCOPE
 
 
 @method_decorator(sensitive_post_parameters(), name="dispatch")
@@ -35,9 +37,19 @@ class LoginAPIView(APIView):
     apply bottom-up, so an inner ``sensitive_post_parameters`` would never run when
     ``csrf_protect`` rejects the request first, leaving the plaintext password unmasked in that
     case.
+
+    Throttled at ``5/min`` (``throttle_scope = "login"``, rate set in
+    ``REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]``), keyed on IP by ``ScopedRateThrottle`` since
+    an anonymous login POST has no authenticated user to key on — see design.md, "Login
+    throttling". Shares the same cache key/scope as the HTML login view's throttle
+    (``accounts.views.ThrottledLoginMixin``) and ``/admin/login/``
+    (``accounts.views.throttled_admin_login``), so an attacker cannot triple their attempt
+    budget by splitting attempts across all three endpoints.
     """
 
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = LOGIN_THROTTLE_SCOPE
 
     @extend_schema(request=LoginSerializer, responses=UserSerializer)
     def post(self, request: Request) -> Response:

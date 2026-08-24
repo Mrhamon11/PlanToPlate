@@ -47,17 +47,21 @@ docker compose up
 sessions, so the app refuses to start without one. Everything else in `.env.example` already
 has a sensible default for a first run.
 
-On first boot the entrypoint applies migrations, collects static files, and (once the
-management commands below exist) seeds the ingredient/unit catalog and creates an admin
-account, printing its one-time temp password to the container logs:
+On first boot the entrypoint applies migrations, collects static files, creates an admin
+account (`bootstrap_admin`, printing its one-time temp password to the container logs), and —
+once `seed_catalog` (task 04) exists — seeds the ingredient/unit catalog:
 
 ```bash
-docker compose logs app | grep -A2 "temp password"
+docker compose logs app | grep -A2 "Temporary password"
 ```
 
+That password is not stored anywhere else and this is the only way to read it back — it stays
+in the container log (readable this way) until that log is rotated or cleared, so treat it as
+sensitive and complete the forced password change on first login promptly.
+
 Then open `https://localhost/` (or the domain you set in `SITE_ADDRESS` — see below) and log
-in with that username and temp password. You'll be asked to set a real password on first
-login.
+in with username `admin` and that temp password. You'll be asked to set a real password on
+first login.
 
 Restarting the stack (`docker compose restart`, or `docker compose down && docker compose
 up`) re-applies migrations and collects static files (both are safe to repeat) but never
@@ -67,23 +71,36 @@ written only after that command actually completes — so each one runs exactly 
 skip (see below) leaves no marker behind, letting the command run automatically the first
 time it becomes available.
 
-### Current status: `seed_catalog` and `bootstrap_admin` are not implemented yet
+### Current status: `seed_catalog` is not implemented yet
 
-Those two management commands land in tasks 04 and 01 respectively. Until then the
-entrypoint detects that they don't exist, logs a line saying so, and skips them cleanly —
-it does not fail the deploy, and it does not write a marker for the skipped command. Once a
-task ships its command and the image is rebuilt, the very next boot picks it up
-automatically, with no volume cleanup needed.
+That management command lands in task 04. Until then the entrypoint detects that it doesn't
+exist, logs a line saying so, and skips it cleanly — it does not fail the deploy, and it does
+not write a marker for the skipped command. Once task 04 ships the command and the image is
+rebuilt, the very next boot picks it up automatically, with no volume cleanup needed.
 
-That means right now, on a clean machine, first boot brings up a working app and an empty
-database with **no admin account**. To reach a working `/admin/` login today:
+That means right now, on a clean machine, first boot brings up a working app with an admin
+account (`bootstrap_admin`, task 01) but an empty ingredient/unit catalog.
+
+If the admin account is ever locked out — the temp password's 7-day expiry passed with no
+login, for instance — there is no self-service recovery; reset it directly:
 
 ```bash
-docker compose exec app python manage.py createsuperuser
+docker compose exec app python manage.py changepassword admin
 ```
 
-This step goes away once task 01 ships `bootstrap_admin` — the walkthrough above becomes
-accurate as written, with no manual command needed.
+`changepassword` cannot help if the account was *deactivated* (a deactivated admin cannot log
+in whatever its password is) and does not exist at all if the admin was created under another
+name. For those, re-run the bootstrap command with `--force`: it reactivates the account
+holding `--username`, re-grants staff/superuser, and prints a fresh one-time temp password,
+exactly as on first boot.
+
+```bash
+docker compose exec app python manage.py bootstrap_admin --force
+```
+
+Without `--force` the command refuses whenever a usable admin already exists, or the requested
+username is taken — so it stays safe to run by hand, and the entrypoint's `.ran-bootstrap_admin`
+marker means a restart never re-runs it on its own.
 
 ### TLS
 

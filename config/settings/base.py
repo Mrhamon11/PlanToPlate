@@ -214,6 +214,19 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Login throttling (01.8, design.md "Login throttling"): keyed on IP via
+    # ScopedRateThrottle, applied to all three credential-accepting login paths —
+    # /api/auth/login/ (accounts/api.py), the HTML login view (accounts/views.py's
+    # ThrottledLoginMixin), and /admin/login/ (accounts/views.py's throttled_admin_login,
+    # wired in ahead of admin.site.urls in config/urls.py). All three share one bucket, so an
+    # attacker cannot dodge the budget by switching endpoints. Deliberately does not lock the
+    # account — accounts are admin-provisioned with no self-service recovery, so a throttle
+    # that locked accounts would hand an attacker a free denial-of-service lever. In
+    # production this also depends on NUM_PROXIES and CACHES, both set in prod.py only — see
+    # that file's comments for why neither belongs here.
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "5/min",
+    },
 }
 
 SPECTACULAR_SETTINGS = {

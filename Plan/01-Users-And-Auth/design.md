@@ -135,7 +135,16 @@ SESSION_COOKIE_SECURE = True                  # prod only
 than "stay logged in for a year from your first login."
 
 DRF `TokenAuthentication` is enabled alongside session auth for a future native client. It is
-unused by the web UI, and no UI exists to mint tokens yet.
+unused by the web UI, and no *project* UI mints tokens.
+
+> **Correction, iteration 3.** An earlier draft of this line said "no UI exists to mint tokens
+> yet." That is false as shipped: adding `rest_framework.authtoken` to `INSTALLED_APPS`
+> registers `authtoken.TokenProxy` in Django Admin, so `/admin/authtoken/tokenproxy/add/`
+> mints a token for any user and returns 200 to a superuser. Blast radius is nil today — the
+> default model permissions make it superuser-only, and the four `/api/auth/` endpoints give
+> an impersonating token nothing a superuser does not already have — but it grows with every
+> domain API added from task 04 onward. Task 09 decides whether to `admin.site.unregister`
+> it or to keep it as a deliberate, audited admin action.
 
 ## Views and endpoints
 
@@ -167,13 +176,25 @@ entirely, requiring the same list to be repeated there.
 
 ## Login throttling
 
-DRF `ScopedRateThrottle`, scope `login`, `5/min`. Applied to both the API login and — via a
-small mixin — the HTML login view.
+DRF `ScopedRateThrottle`, scope `login`, `5/min`. Applied to all three credential-accepting
+login paths: the API login, the HTML login view (via a small mixin), and `/admin/login/`
+(Django's own `AdminSite.login`, wrapped ahead of `admin.site.urls` in `config/urls.py` since
+it shares neither of the other two's view code). All three share one throttle scope/bucket, so
+an attacker cannot dodge the budget by switching endpoints — `/admin/login/` fronts the
+`bootstrap_admin`-created superuser at the guessable default username `admin` and would
+otherwise be the least-protected path to the most valuable account.
 
 Accounts are admin-provisioned with no self-service recovery, so an attacker who locks out a
 real user creates a support burden. Rate limiting is therefore keyed on IP and deliberately
 **does not lock the account** — it slows the attacker without giving them a denial-of-service
 lever against a legitimate user.
+
+In production, keying on IP requires two more things to actually hold: `REST_FRAMEWORK["NUM_PROXIES"]`
+must be set (`config/settings/prod.py`, not `base.py` — see that file's comment) so DRF trusts
+only the hop Caddy itself appended to `X-Forwarded-For` rather than a client-supplied header
+value verbatim; and the throttle's counters must live in a cache shared across gunicorn's
+worker processes (`CACHES` in `prod.py`, `FileBasedCache` — `LocMemCache`, Django's unconfigured
+default, is per-process and would silently multiply the enforced rate by the worker count).
 
 ## Edge cases
 
@@ -190,8 +211,19 @@ lever against a legitimate user.
 
 - Passwords: Django's default PBKDF2, salted per user. Never log a password, never include one
   in an error message, never return one in a response.
-- The generated temp password is returned exactly once, in the admin's create-user response.
-  It is never persisted, never emailed, never retrievable afterward.
+- The generated temp password is never persisted and never emailed. It is never recoverable
+  from the database: `secrets.token_urlsafe(16)` is hashed on the way in and the plaintext is
+  cleared from `user._password` on every path, including both rollback paths.
+
+  **It is not, however, "never retrievable afterward" — an earlier draft of this line said
+  that and it is false for the bootstrapped first admin.** `manage.py bootstrap_admin` (01.9)
+  prints the temp password to stdout, and in the deployed container stdout is the Docker
+  json-file log, which `docker compose logs app` will replay until the container is recreated.
+  This is deliberate and unavoidable: it is the only channel that exists before any admin can
+  log in, and task 10's first-boot runbook (10.16, step 5) depends on it. The claim holds
+  unchanged for task 09's admin create-user flow, which returns the password in an HTTP
+  response and writes it nowhere. Task 10 (10.7) constrains the exposure window with log
+  rotation.
 - Session cycling on password change is mandatory — otherwise a stolen session survives the
   very reset that was meant to end it. `complete_password_change` also revokes every DRF
   `authtoken.Token` for the user in the same transaction, for the same reason: a token has no

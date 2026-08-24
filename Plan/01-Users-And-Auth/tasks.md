@@ -66,10 +66,15 @@
   *Done when:* all four appear in `/api/docs/` and round-trip correctly, and a minted token
   authenticates an API request while `BasicAuthentication` remains disabled.
 
-- [ ] **01.8 — Login throttling**
-  `ScopedRateThrottle` at `5/min` on both login paths.
-  *Files:* `config/settings/base.py`, `accounts/api.py`, `accounts/views.py`
-  *Done when:* the sixth attempt in a minute returns 429.
+- [x] **01.8 — Login throttling**
+  `ScopedRateThrottle` at `5/min`, one shared scope across all three credential-accepting
+  paths: `/api/auth/login/`, the HTML login view, and `/admin/login/` (Django's own
+  `AdminSite.login`, wrapped ahead of `admin.site.urls`). In production the IP key also
+  requires `NUM_PROXIES` and a cross-worker `CACHES` (both `prod.py`) and Caddy overwriting
+  `X-Forwarded-For` — see design.md, "Login throttling".
+  *Files:* `config/settings/base.py`, `config/settings/prod.py`, `config/urls.py`,
+  `accounts/throttling.py`, `accounts/api.py`, `accounts/views.py`, `Caddyfile`
+  *Done when:* the sixth attempt in a minute returns 429, on any mix of the three paths.
 
   Carried over from the 01.6/01.7 review — resolve here:
   - **Size the throttle knowing a failed login costs ~239 ms of PBKDF2**, roughly double a
@@ -84,10 +89,14 @@
     a regression: the in-memory-consistency assertions that run *after* `refresh_from_db()`,
     which makes them tautological.
 
-- [ ] **01.9 — Bootstrap superuser command**
+- [x] **01.9 — Bootstrap superuser command**
   `manage.py bootstrap_admin` creating the first admin with a printed temp password, so a
-  fresh deployment has a way in. Idempotent — refuses politely if an admin already exists.
-  *Files:* `accounts/management/commands/bootstrap_admin.py`
+  fresh deployment has a way in. Idempotent — refuses politely if a *usable* (active) admin
+  already exists, and refuses with a message naming the actual case when the requested
+  username is taken. `--force` is the recovery hatch: it reuses the account holding
+  `--username`, reactivating it, granting staff/superuser and issuing a fresh temp password,
+  for the deactivated-admin and expired-temp-password lockouts that have no other way back in.
+  *Files:* `accounts/management/commands/bootstrap_admin.py`, `README.md`
 
   Carried over from the 01.6/01.7 review — resolve here:
   - **`set_temp_password` mutates the caller's `User` instance before its `transaction.atomic()`
@@ -107,6 +116,14 @@
     page is reachable until it is done. It could not be done during 01.6/01.7 because there was
     no way to mint a temp password by hand; the flow is covered by automated tests meanwhile.
 
-- [ ] **01.10 — Update the living document**
-  Task 01 → AWAITING APPROVAL.
-  *Files:* `Plan/MILESTONES.md`
+- [x] **01.10 — Update the living document**
+  Task 01 → AWAITING APPROVAL. Decision log gained D25–D29 (login throttling and its two
+  prod-only dependencies; `bootstrap_admin --force`; the temp password's real retrievability;
+  Caddy replacing rather than appending `X-Forwarded-For`; `authtoken.TokenProxy` in the
+  admin). Two false statements in this task's `design.md` were corrected in place. Fourteen
+  non-blocking review findings were deferred into `02-UI-Shell` (02.11), `09-Admin-Control-Center`
+  (09.1, 09.6, 09.8, 09.13) and `10-Security-And-Deployment` (10.1, 10.3, 10.5, 10.7, 10.8),
+  written into those subtasks rather than left in a findings file nobody will reopen.
+  *Files:* `Plan/MILESTONES.md`, `Plan/01-Users-And-Auth/design.md`,
+  `Plan/02-UI-Shell/tasks.md`, `Plan/09-Admin-Control-Center/tasks.md`,
+  `Plan/10-Security-And-Deployment/tasks.md`

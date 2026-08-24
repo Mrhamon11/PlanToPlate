@@ -52,9 +52,16 @@
   *Files:* `core/views.py`, `templates/core/home.html`, `config/urls.py`
 
 - [ ] **02.11 — Error pages**
-  Styled 403, 404, 500 extending `base.html`. 500 must not depend on a context processor that
-  could itself be the thing that failed.
-  *Files:* `templates/403.html`, `404.html`, `500.html`
+  Styled 403, 404, 429, 500 extending `base.html`. 500 must not depend on a context processor
+  that could itself be the thing that failed.
+
+  **429 is deferred here from task 01.** Login throttling shipped in 01.8, but the HTML login
+  view and `/admin/login/` return the 429 as `HttpResponse(content_type="text/plain")` — a
+  bare wall of text at the moment a real user has fat-fingered their password five times. Give
+  it a template that says what happened, how long to wait, and that no account has been locked.
+  Keep the `Retry-After` header the throttle already sets, and surface the same number in the
+  body.
+  *Files:* `templates/403.html`, `404.html`, `429.html`, `500.html`, `accounts/views.py`
 
 - [ ] **02.12 — Update the living document**
   Task 02 → AWAITING APPROVAL.

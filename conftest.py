@@ -6,11 +6,26 @@ Written once here so seven apps do not each invent a slightly different user fac
 import factory
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
 # Shared with tests/test_conftest.py so the factory's default and the test asserting it stay
 # in sync rather than duplicating the literal in two places.
 DEFAULT_TEST_PASSWORD = "testpass123"
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """DRF's ``ScopedRateThrottle`` (01.8's login throttle) counts attempts in Django's cache
+    framework, which pytest-django's per-test transaction rollback does not touch — without
+    this, attempts made by one test's login POSTs would accumulate against every other test
+    using the same client IP, making the suite's pass/fail depend on run order and eventually
+    making unrelated login-using tests fail with 429. Cleared both before and after so a test
+    that intentionally exhausts the throttle never leaks that state into the next one either.
+    """
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture

@@ -39,19 +39,65 @@ def set_temp_password(user: User) -> str:
 
     Also revokes any existing DRF token for ``user`` — an admin re-issuing a temp password (a
     lost-credential recovery, say) must not leave the old credential's token still live.
+
+    On failure, the in-memory ``user`` is restored so a caller that catches the exception and
+    later calls ``user.save()`` for an unrelated reason cannot commit a half-applied reset —
+    ``must_change_password=True`` paired with a temp password the admin was never shown, which
+    would lock the account with no way in. For an already-saved user this means the row's
+    (rolled-back) database state, not literally "however the caller had it before this call" —
+    a caller holding unrelated unsaved edits on the same instance (say an admin form's
+    in-progress ``user.email`` change) loses them on this path too, since ``refresh_from_db()``
+    cannot distinguish "changed by this function" from "changed by the caller". Mirrors
+    ``complete_password_change``'s restoration below.
     """
     temp_password = generate_temp_password()
+    had_pk = user.pk is not None
+    previous_password = user.password
+    previous_must_change_password = user.must_change_password
+    previous_temp_password_expires_at = user.temp_password_expires_at
     user.set_password(temp_password)
     user.must_change_password = True
     user.temp_password_expires_at = timezone.now() + TEMP_PASSWORD_LIFETIME
-    with transaction.atomic():
-        if user.pk is None:
-            user.save()
+    try:
+        with transaction.atomic():
+            if user.pk is None:
+                user.save()
+            else:
+                user.save(
+                    update_fields=[
+                        "password",
+                        "must_change_password",
+                        "temp_password_expires_at",
+                    ]
+                )
+            Token.objects.filter(user=user).delete()
+    except Exception:
+        if had_pk:
+            try:
+                # refresh_from_db() restores every concrete field from the (rolled-back) row
+                # in one call, rather than hand-mirroring a field list that would silently go
+                # stale the next time a field is added to this flow.
+                user.refresh_from_db()
+            except Exception:  # noqa: S110 — deliberately silent, see comment below
+                # A concurrently deleted row would raise DoesNotExist here — swallowed rather
+                # than left to replace the exception on the line below with an unrelated one.
+                # Best-effort restore; the original failure is still what the caller sees.
+                pass
         else:
-            user.save(
-                update_fields=["password", "must_change_password", "temp_password_expires_at"]
-            )
-        Token.objects.filter(user=user).delete()
+            # There is no row to reload — the insert never committed, so pk is still None.
+            # _state.adding is restored too, so the instance is exactly as it was handed in,
+            # not merely "save() would still route to an INSERT" (which pk=None alone gives).
+            user.password = previous_password
+            user.must_change_password = previous_must_change_password
+            user.temp_password_expires_at = previous_temp_password_expires_at
+            user.pk = None
+            user._state.adding = True
+        # refresh_from_db() only reloads model fields — it does not know about `_password`,
+        # AbstractBaseUser's own cache of the plaintext value passed to set_password(). Left
+        # alone, a save() that fails before AbstractBaseUser.save() clears it would leave that
+        # plaintext sitting on the in-memory instance even after the field restore above.
+        user._password = None
+        raise
     return temp_password
 
 
@@ -77,14 +123,14 @@ def complete_password_change(user: User, new_password: str) -> None:
     still active, or a surviving token outlives the reset that was meant to end it (design.md,
     "Security notes" — the same reasoning already applied to session cycling).
 
-    On failure, the in-memory ``user`` is reset to its pre-call state so it does not disagree
-    with the rolled-back database.
+    On failure, the in-memory ``user`` is restored to the (rolled-back) database's state — not
+    literally "however the caller had it before this call": a caller holding unrelated unsaved
+    edits on the same instance loses them here too, since ``refresh_from_db()`` cannot tell
+    "changed by this function" apart from "changed by the caller". No caller today hits that
+    case; see the same caveat on ``set_temp_password`` above.
     """
     validate_password(new_password, user=user)
 
-    previous_password = user.password
-    previous_must_change_password = user.must_change_password
-    previous_temp_password_expires_at = user.temp_password_expires_at
     try:
         with transaction.atomic():
             user.set_password(new_password)
@@ -95,7 +141,20 @@ def complete_password_change(user: User, new_password: str) -> None:
             )
             Token.objects.filter(user=user).delete()
     except Exception:
-        user.password = previous_password
-        user.must_change_password = previous_must_change_password
-        user.temp_password_expires_at = previous_temp_password_expires_at
+        try:
+            # refresh_from_db() restores every concrete field from the (rolled-back) row in
+            # one call rather than hand-mirroring a field list that would silently go stale
+            # the next time a field is added to this flow — the same treatment as
+            # set_temp_password above.
+            user.refresh_from_db()
+        except Exception:  # noqa: S110 — deliberately silent, see comment below
+            # A concurrently deleted row would raise DoesNotExist here — swallowed rather than
+            # left to replace the exception on the line below with an unrelated one. Best-effort
+            # restore; the original failure is still what the caller sees.
+            pass
+        # ...but it only reloads model fields, not `_password` (AbstractBaseUser's own cache
+        # of the plaintext passed to set_password()) — cleared explicitly so a save() failing
+        # before AbstractBaseUser.save() gets a chance to clear it doesn't leave that
+        # plaintext sitting on the in-memory instance.
+        user._password = None
         raise

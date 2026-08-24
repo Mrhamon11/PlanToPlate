@@ -32,6 +32,16 @@ def test_generate_temp_password_is_unique():
     assert len(passwords) == 100
 
 
+def test_temp_password_lifetime_is_seven_days():
+    """design.md and the expiry copy shown to a locked-out user both state seven days.
+
+    ``test_set_temp_password_sets_flags`` below checks the expiry window against
+    ``TEMP_PASSWORD_LIFETIME`` itself, so it holds for whatever that constant happens to say —
+    the number the design actually commits to has to be stated once, here, against a literal.
+    """
+    assert TEMP_PASSWORD_LIFETIME == timedelta(days=7)
+
+
 def test_set_temp_password_sets_flags(user_factory):
     user = user_factory()
     before = timezone.now()
@@ -77,6 +87,63 @@ def test_set_temp_password_on_unsaved_user_persists():
     assert saved.temp_password_expires_at is not None
 
 
+def test_set_temp_password_restores_unsaved_user_on_failure():
+    """The ``user.pk is None`` branch of the failure-restore path (see the comment in
+    ``set_temp_password``), exercised directly: a bare, never-persisted instance whose insert
+    fails must be left exactly as it was handed in, with no row ever created — there is
+    nothing in the database to reload from, unlike the already-saved-user case covered by
+    ``test_set_temp_password_rolls_back_on_token_delete_failure``.
+    """
+    user = User(username="freshadmin")
+    original_password = user.password
+    original_must_change_password = user.must_change_password
+    original_temp_password_expires_at = user.temp_password_expires_at
+
+    with (
+        patch.object(type(user), "save", side_effect=RuntimeError("simulated insert failure")),
+        pytest.raises(RuntimeError),
+    ):
+        set_temp_password(user)
+
+    assert user.pk is None
+    assert user.password == original_password
+    assert user.must_change_password == original_must_change_password
+    assert user.temp_password_expires_at == original_temp_password_expires_at
+    assert user._password is None
+    assert not User.objects.filter(username="freshadmin").exists()
+
+
+def test_set_temp_password_rolls_back_on_token_delete_failure_for_unsaved_user():
+    """The ``user.pk is None`` restore branch, exercised through the caller shape that
+    actually needs it: an unsaved ``User`` whose ``save()`` succeeds — assigning a real pk —
+    followed by a token-delete failure that rolls the whole transaction back.
+
+    ``test_set_temp_password_restores_unsaved_user_on_failure`` patches ``save`` itself to
+    raise, so ``user.pk`` is still ``None`` when its ``except`` runs and ``user.pk = None`` is
+    a no-op there — mutation-verified during review (replacing that line with ``pass`` still
+    left the whole suite green). This is the case where it matters: the INSERT already
+    happened and assigned a pk before the failure, exactly ``bootstrap_admin``'s shape
+    (``User(...)`` straight into ``set_temp_password``, no intermediate ``.save()``) — without
+    the restore, a caller catching this exception would be left holding an instance whose
+    ``pk`` points at a row the rolled-back transaction just deleted.
+    """
+    user = User(username="freshadmin")
+
+    with (
+        patch(
+            "accounts.services.Token.objects.filter",
+            side_effect=RuntimeError("simulated delete failure"),
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        set_temp_password(user)
+
+    assert user.pk is None
+    assert user._state.adding is True
+    assert user._password is None
+    assert not User.objects.filter(username="freshadmin").exists()
+
+
 def test_set_temp_password_revokes_existing_tokens(user_factory):
     """An admin re-issuing a temp password must not leave the old credential's token live.
 
@@ -92,6 +159,27 @@ def test_set_temp_password_revokes_existing_tokens(user_factory):
     assert not Token.objects.filter(pk=token.pk).exists()
 
 
+def test_set_temp_password_preserves_original_exception_when_restore_also_fails(user_factory):
+    """The restore's own ``refresh_from_db()`` is wrapped in its own ``try/except`` so a
+    concurrently deleted row cannot replace the real failure with an unrelated
+    ``DoesNotExist`` — the caller must always see why ``set_temp_password`` actually failed,
+    not an artifact of the best-effort restore attempt.
+    """
+    user = user_factory()
+
+    with (
+        patch.object(
+            type(user), "refresh_from_db", side_effect=RuntimeError("simulated concurrent delete")
+        ),
+        patch(
+            "accounts.services.Token.objects.filter",
+            side_effect=RuntimeError("simulated token delete failure"),
+        ),
+        pytest.raises(RuntimeError, match="simulated token delete failure"),
+    ):
+        set_temp_password(user)
+
+
 def test_set_temp_password_rolls_back_on_token_delete_failure(user_factory):
     """``transaction.atomic()`` around ``set_temp_password``'s save-then-revoke must cover the
     token delete too, mirroring
@@ -101,9 +189,21 @@ def test_set_temp_password_rolls_back_on_token_delete_failure(user_factory):
     overwritten with the new temp password (and ``must_change_password``/expiry already set)
     while the old token stays live — a half-applied credential reset with no way back for the
     admin who thinks they just issued a fresh temp password.
+
+    Checked directly on the caller's in-memory instance, with no ``refresh_from_db()`` call
+    in between: ``set_temp_password`` mutates ``user`` *before* entering
+    ``transaction.atomic()``, so a version that rolled back the database but never restored
+    the in-memory object would still pass an assertion made only against a freshly reloaded
+    instance — the DB write is correctly undone either way, but the caller's own ``user``
+    object would silently disagree with it. A caller that catches this exception and later
+    calls ``user.save()`` for an unrelated reason would then commit that stale state: a temp
+    password the admin was never shown, paired with ``must_change_password=True``, locking
+    the account with no way in.
     """
     user = user_factory()
     original_password_hash = user.password
+    original_must_change_password = user.must_change_password
+    original_temp_password_expires_at = user.temp_password_expires_at
     Token.objects.create(user=user)
 
     with (
@@ -115,10 +215,14 @@ def test_set_temp_password_rolls_back_on_token_delete_failure(user_factory):
     ):
         set_temp_password(user)
 
-    user.refresh_from_db()
     assert user.password == original_password_hash
-    assert user.must_change_password is False
-    assert user.temp_password_expires_at is None
+    assert user.must_change_password is original_must_change_password
+    assert user.temp_password_expires_at == original_temp_password_expires_at
+
+    reloaded = User.objects.get(pk=user.pk)
+    assert reloaded.password == original_password_hash
+    assert reloaded.must_change_password is original_must_change_password
+    assert reloaded.temp_password_expires_at == original_temp_password_expires_at
     assert Token.objects.filter(user=user).exists()
 
 
@@ -180,6 +284,29 @@ def test_complete_password_change_revokes_existing_tokens(user_factory):
     assert not Token.objects.filter(pk=token.pk).exists()
 
 
+def test_complete_password_change_preserves_original_exception_when_restore_also_fails(
+    user_factory,
+):
+    """Mirrors ``test_set_temp_password_preserves_original_exception_when_restore_also_fails``:
+    a concurrently deleted row during the restore's own ``refresh_from_db()`` must not replace
+    the real failure with an unrelated ``DoesNotExist``.
+    """
+    user = user_factory()
+    set_temp_password(user)
+
+    with (
+        patch.object(
+            type(user), "refresh_from_db", side_effect=RuntimeError("simulated concurrent delete")
+        ),
+        patch(
+            "accounts.services.Token.objects.filter",
+            side_effect=RuntimeError("simulated token delete failure"),
+        ),
+        pytest.raises(RuntimeError, match="simulated token delete failure"),
+    ):
+        complete_password_change(user, "BrandNewPassw0rd!")
+
+
 def test_complete_password_change_rolls_back_on_token_delete_failure(user_factory):
     """``transaction.atomic()`` must cover the token delete too, not just the ``save()``.
 
@@ -207,9 +334,6 @@ def test_complete_password_change_rolls_back_on_token_delete_failure(user_factor
     assert user.must_change_password is True
     assert user.temp_password_expires_at is not None
     assert Token.objects.filter(user=user).exists()
-    # The in-memory instance must not disagree with the rolled-back database either.
-    assert user.check_password("BrandNewPassw0rd!") is False
-    assert user.must_change_password is True
 
 
 def test_complete_password_change_restores_in_memory_state_on_failure(user_factory):
@@ -242,6 +366,33 @@ def test_complete_password_change_restores_in_memory_state_on_failure(user_facto
     assert user.password == previous_password_hash
     assert user.must_change_password is True
     assert user.temp_password_expires_at == previous_expires_at
+    assert user.check_password(temp_password) is True
+    assert user.check_password("BrandNewPassw0rd!") is False
+    # `_password` is deliberately not asserted here: this test's failure is injected at the
+    # token delete, i.e. after user.save() succeeded, and AbstractBaseUser.save() clears
+    # `_password` itself — the assertion would hold with the service's own clearing deleted.
+    # test_complete_password_change_clears_cached_plaintext_when_save_fails covers it instead.
+
+
+def test_complete_password_change_clears_cached_plaintext_when_save_fails(user_factory):
+    """``set_password()`` caches the plaintext on the instance as ``_password``, and only
+    ``AbstractBaseUser.save()`` clears it — so a ``save()`` that *raises* leaves the caller
+    holding the new password in the clear, which is why the ``except`` block clears it by hand.
+
+    Injecting the failure at the token delete (the test above) cannot exercise that: by then
+    ``save()`` has already run and cleared ``_password`` itself. This fails at ``save()``, the
+    only path where the service's own clearing is what does the work.
+    """
+    user = user_factory()
+    temp_password = set_temp_password(user)
+
+    with (
+        patch.object(type(user), "save", side_effect=RuntimeError("simulated write failure")),
+        pytest.raises(RuntimeError, match="simulated write failure"),
+    ):
+        complete_password_change(user, "BrandNewPassw0rd!")
+
+    assert user._password is None
     assert user.check_password(temp_password) is True
     assert user.check_password("BrandNewPassw0rd!") is False
 
