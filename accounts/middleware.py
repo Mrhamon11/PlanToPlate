@@ -12,15 +12,27 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
-from django.urls import NoReverseMatch, reverse
+from django.urls import reverse
 
-# Fallback only. The logout view does not exist until subtask 01.6, so ``reverse()`` cannot
-# resolve ``accounts:logout`` yet — ``_is_exempt`` tries the real name first and falls back to
-# this hardcoded string on ``NoReverseMatch``. Once 01.6 mounts logout, the real name wins and
-# this constant stops being read for anything but the self-check in
-# ``test_forced_password_change.py`` that keeps the two from silently drifting apart.
-LOGOUT_PATH = "/accounts/logout/"
 HEALTHZ_PATH = "/healthz/"
+
+
+def api_password_change_path() -> str:
+    """The one ``/api/auth/`` path exempt from the forced-change block.
+
+    Exact path, not an ``/api/auth/`` prefix — a prefix match would also exempt
+    ``/api/auth/me/``. Reversed lazily (never at import time, since the URLconf may not be
+    loaded yet) and shared with ``accounts.permissions.ForcePasswordChangeAPIPermission`` so
+    the two exemptions cannot drift apart.
+    """
+    return reverse("accounts_api:password-change")
+
+
+def api_logout_path() -> str:
+    """``/api/auth/logout/`` — exempt for the same reason ``accounts:logout`` is: a user forced
+    to change their password must still be able to leave.
+    """
+    return reverse("accounts_api:logout")
 
 
 class ForcePasswordChangeMiddleware:
@@ -53,12 +65,9 @@ class ForcePasswordChangeMiddleware:
                 "'django.contrib.auth.middleware.AuthenticationMiddleware' before "
                 "'accounts.middleware.ForcePasswordChangeMiddleware'."
             )
-        # Reading request.user before the exemption check is load-bearing, not incidental
-        # ordering. request.user is lazy, and it is that access which runs django.contrib.auth
-        # .get_user() — the session-auth-hash comparison that flushes a session whose password
-        # has since changed. A view that never touches request.user (core.views.healthz, say)
-        # would otherwise leave a stale session row alive on an exempt path. Checking the path
-        # first would look like a harmless optimisation and would silently break that.
+        # request.user is lazy — accessing it here (before the exemption check) is what runs
+        # get_user()'s session-auth-hash comparison and flushes a stale session. Checking the
+        # path first would skip that on an exempt path such as /healthz/.
         user = request.user
         if not user.is_authenticated or not user.must_change_password:
             return None
@@ -71,15 +80,12 @@ class ForcePasswordChangeMiddleware:
 
     @staticmethod
     def _is_exempt(path: str) -> bool:
-        try:
-            logout_path = reverse("accounts:logout")
-        except NoReverseMatch:
-            logout_path = LOGOUT_PATH
-
         exempt_paths = {
             reverse("accounts:password_change"),
-            logout_path,
+            reverse("accounts:logout"),
             HEALTHZ_PATH,
+            api_password_change_path(),
+            api_logout_path(),
         }
         if path in exempt_paths:
             return True

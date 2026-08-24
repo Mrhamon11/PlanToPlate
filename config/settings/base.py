@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework.authtoken",
     "django_filters",
     "drf_spectacular",
     "core",
@@ -159,6 +160,20 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "accounts.User"
 
+# TempPasswordAwareBackend wraps ModelBackend to reject an expired temp password at
+# user_can_authenticate() — every authenticate() call path (the login view, /admin/login/,
+# the API login) consults that method, which makes it the one choke point that reaches all
+# three. See accounts/backends.py and Plan/01-Users-And-Auth/design.md, "Temp password flow"
+# step 5. Replaces the default ModelBackend entirely rather than adding alongside it — the
+# subclass is a strict superset of ModelBackend's own checks.
+AUTHENTICATION_BACKENDS = ["accounts.backends.TempPasswordAwareBackend"]
+
+LOGIN_URL = "accounts:login"
+# There is no dedicated "home" page until task 02 (UI Shell) lands — the profile view is the
+# nearest thing to one today, so both settings point there.
+LOGIN_REDIRECT_URL = "accounts:profile"
+LOGOUT_REDIRECT_URL = "accounts:login"
+
 
 # Authentication
 # Session cookies, not JWT — see MILESTONES.md for the rationale. SESSION_SAVE_EVERY_REQUEST
@@ -179,14 +194,19 @@ SESSION_COOKIE_SAMESITE = "Lax"
 REST_FRAMEWORK = {
     # Explicit on purpose: DRF's built-in default is [SessionAuthentication,
     # BasicAuthentication], which would silently accept Authorization: Basic on every
-    # endpoint with no throttle guarding it. MILESTONES.md lists only sessions and (later)
-    # TokenAuthentication. TokenAuthentication is appended in task 01 — its migration needs
-    # an FK to AUTH_USER_MODEL, which does not exist until the custom User model lands.
+    # endpoint with no throttle guarding it. MILESTONES.md lists only sessions and
+    # TokenAuthentication — BasicAuthentication is never enabled.
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
+        # ForcePasswordChangeMiddleware never sees a token-authenticated request's real user —
+        # DRF authenticates inside APIView.initial(), after middleware runs. This permission is
+        # the DRF-side counterpart that closes that gap. See accounts/permissions.py and
+        # design.md, "Temp password flow" step 3.
+        "accounts.permissions.ForcePasswordChangeAPIPermission",
     ],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -204,5 +224,14 @@ SPECTACULAR_SETTINGS = {
     # drf-spectacular serves the schema and Swagger UI to AllowAny by default, which would
     # override the default-deny above and publish the full API shape anonymously. There is no
     # anonymous access anywhere in this app (MILESTONES.md section 4).
-    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    #
+    # SpectacularAPIView/SwaggerView set permission_classes = SERVE_PERMISSIONS directly, which
+    # *replaces* DEFAULT_PERMISSION_CLASSES rather than extending it — so
+    # ForcePasswordChangeAPIPermission has to be listed again here, or /api/schema/ and
+    # /api/docs/ become the only endpoints in the project where a must_change_password=True
+    # token holder gets unrestricted access.
+    "SERVE_PERMISSIONS": [
+        "rest_framework.permissions.IsAuthenticated",
+        "accounts.permissions.ForcePasswordChangeAPIPermission",
+    ],
 }

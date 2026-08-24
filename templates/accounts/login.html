@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Log in — PlanToPlate</title>
+</head>
+<body>
+    <main>
+        <h1>Log in</h1>
+
+        {% if form.non_field_errors %}
+            <ul class="errors">
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <form method="post" action="{% url 'accounts:login' %}">
+            {% csrf_token %}
+            <p>
+                <label for="{{ form.username.id_for_label }}">Username</label>
+                {{ form.username }}
+                {% for error in form.username.errors %}
+                    <span class="error">{{ error }}</span>
+                {% endfor %}
+            </p>
+            <p>
+                <label for="{{ form.password.id_for_label }}">Password</label>
+                {{ form.password }}
+                {% for error in form.password.errors %}
+                    <span class="error">{{ error }}</span>
+                {% endfor %}
+            </p>
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit">Log in</button>
+        </form>
+    </main>
+</body>
+</html>

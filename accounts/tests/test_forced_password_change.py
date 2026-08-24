@@ -1,19 +1,17 @@
-"""Tests for ForcePasswordChangeMiddleware (subtask 01.5).
-
-Two test-plan entries are deliberately absent here rather than stubbed:
-``test_after_change_normal_access_restored`` and ``test_expired_temp_password_rejected``
-both need the real login view and the password-change view from subtask 01.6 to exercise
-("log in", "the change form actually clears the flag through a POST") — this task only
-carries a placeholder view (see accounts/views.py). They belong in 01.6.
+"""Tests for ForcePasswordChangeMiddleware (subtask 01.5) and the forced-reset flow it guards,
+completed in subtask 01.6 now that the real login and password-change views exist.
 """
+
+from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user
 from django.core.exceptions import ImproperlyConfigured
-from django.urls import NoReverseMatch, reverse
+from django.urls import reverse
+from django.utils import timezone
 
-from accounts.middleware import LOGOUT_PATH, ForcePasswordChangeMiddleware
-from accounts.services import complete_password_change
+from accounts.middleware import ForcePasswordChangeMiddleware
+from accounts.services import complete_password_change, temp_password_expired
 
 pytestmark = pytest.mark.django_db
 
@@ -45,14 +43,16 @@ def test_change_form_itself_not_redirected(client, user_factory):
 
 
 def test_logout_not_redirected(client, user_factory):
+    """A user forced to change their password can still leave — the exempt logout path must
+    never be shadowed by the change-form redirect.
+    """
     user = user_factory(must_change_password=True)
     client.force_login(user)
 
-    response = client.post("/accounts/logout/")
+    response = client.post(reverse("accounts:logout"))
 
-    # The logout view itself doesn't exist until 01.6 (a bare 404 here is expected), but the
-    # middleware must never be the reason this path redirects to the change form.
     assert response.get("Location") != reverse("accounts:password_change")
+    assert get_user(client).is_anonymous
 
 
 def test_api_returns_403_not_redirect(client, user_factory):
@@ -103,21 +103,57 @@ def test_static_and_healthz_exempt(client, user_factory):
     assert media_response.status_code != 302
 
 
-def test_logout_exemption_matches_hardcoded_fallback():
-    """The middleware's exemption tries ``reverse("accounts:logout")`` before falling back to
-    the hardcoded ``LOGOUT_PATH`` constant (see accounts/middleware.py). Subtask 01.6 hasn't
-    mounted a logout route yet, so this is vacuous today — the ``NoReverseMatch`` branch is
-    taken and there is nothing to compare. The moment 01.6 mounts ``accounts:logout``
-    somewhere other than ``LOGOUT_PATH``, ``reverse()`` here succeeds and the assertion below
-    goes red, catching the drift immediately instead of via a silent "logout doesn't log you
-    out" bug.
-    """
-    try:
-        logout_path = reverse("accounts:logout")
-    except NoReverseMatch:
-        pytest.skip("accounts:logout not mounted yet (subtask 01.6)")
+def test_after_change_normal_access_restored(client, user_factory):
+    """01.6's single bolded requirement: the acting session survives the change.
 
-    assert logout_path == LOGOUT_PATH
+    ``update_session_auth_hash`` *cycles* the session (a fresh key, to defeat session fixation)
+    but does not flush it — unlike a bare ``set_password``, which would kill every session for
+    the user, including this one. Asserted directly against the same client/session that made
+    the POST, with no intervening re-login, and against a route
+    (``accounts:profile``) that ``ForcePasswordChangeMiddleware`` does not exempt — ``/healthz/``
+    is exempt unconditionally regardless of ``must_change_password``, so a probe against it would
+    pass even if the forced-reset loop never actually ended.
+    """
+    user = user_factory(must_change_password=True)
+    client.force_login(user)
+    session_key_before = client.session.session_key
+
+    response = client.post(
+        reverse("accounts:password_change"),
+        {
+            "old_password": "testpass123",
+            "new_password1": "BrandNewPassw0rd!",
+            "new_password2": "BrandNewPassw0rd!",
+        },
+    )
+    assert response.status_code == 302
+
+    assert get_user(client).is_authenticated
+    assert client.session.session_key is not None
+    assert client.session.session_key != session_key_before
+
+    user.refresh_from_db()
+    assert user.must_change_password is False
+
+    follow_up = client.get(reverse("accounts:profile"))
+    assert follow_up.status_code == 200
+
+
+def test_expired_temp_password_rejected(client, user_factory):
+    user = user_factory(password="StillCorrectPassw0rd!")
+    user.must_change_password = True
+    user.temp_password_expires_at = timezone.now() - timedelta(seconds=1)
+    user.save(update_fields=["must_change_password", "temp_password_expires_at"])
+    assert temp_password_expired(user) is True
+
+    response = client.post(
+        reverse("accounts:login"),
+        {"username": user.username, "password": "StillCorrectPassw0rd!"},
+    )
+
+    assert response.status_code == 200
+    assert not response.wsgi_request.user.is_authenticated
+    assert "expired" in str(response.context["form"].errors).lower()
 
 
 def test_missing_authentication_middleware_raises(rf):

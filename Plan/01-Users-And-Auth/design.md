@@ -87,8 +87,10 @@ the entire account-enumeration and email-deliverability surface.
    someone who already has the correct password.
 
    The backend is **not** a choke point for DRF `TokenAuthentication` (01.7), which never calls
-   `authenticate()`. There, expiry is covered only transitively: an expired temp password
-   implies `must_change_password=True`, which the API's own guard must enforce.
+   `authenticate()`. There, `PasswordChangeSerializer.validate_old_password` calls
+   `temp_password_expired(user)` directly after the `check_password` check, so an expired temp
+   password cannot be used as `old_password` to clear its own expiry — the one endpoint that
+   remains reachable under a forced change does not double as a self-service escape hatch.
 
    The rule itself belongs in `accounts/services.py`, per `CLAUDE.md` §3, as something like
    `temp_password_expired(user) -> bool`, not written inline in the backend or a view. Pin its semantics:
@@ -100,12 +102,18 @@ the entire account-enumeration and email-deliverability surface.
 
 `accounts.middleware.ForcePasswordChangeMiddleware`. Redirects authenticated users with
 `must_change_password=True` to the change form. **Exempt paths:** the change form itself,
-logout, `/healthz/`, static/media, and `POST /api/auth/password/change/` — without the first
-group the redirect loops, and without the last one a temp-password API client gets `403
+`POST /accounts/logout/`, `/healthz/`, static/media, `POST /api/auth/password/change/`, and
+`POST /api/auth/logout/` — without the first group the redirect loops, and without the API
+password-change exemption a temp-password API client gets `403
 {"detail": "password_change_required"}` on every request, including the one request that would
-clear the condition, leaving it no reachable way out. The API exemption must match the
-**exact path** `/api/auth/password/change/`, not an `/api/auth/` prefix — a prefix match would
-also exempt `/api/auth/me/` and every other authenticated endpoint from enforcement.
+clear the condition, leaving it no reachable way out. Both API exemptions must match an
+**exact path**, not an `/api/auth/` prefix — a prefix match would also exempt `/api/auth/me/`
+and every other authenticated endpoint from enforcement.
+
+The middleware runs before DRF's permission classes, so the API logout exemption has to live
+here too, not only on `LogoutAPIView.permission_classes` — a permission-class-only fix closes
+the gap for a token-authenticated client but leaves a session-authenticated one still 403'd by
+the middleware before the permission is ever consulted.
 
 For API requests (`/api/`) it returns `403` with a machine-readable
 `{"detail": "password_change_required"}` rather than a redirect, because a REST client cannot
@@ -137,17 +145,25 @@ unused by the web UI, and no UI exists to mint tokens yet.
 |---|---|---|
 | `GET/POST /accounts/login/` | `LoginView` | Django's, with a project template. Throttled. |
 | `POST /accounts/logout/` | `LogoutView` | POST only — a GET logout is CSRF-triggerable from an `<img>` tag. |
-| `GET/POST /accounts/password/change/` | `PasswordChangeView` | Doubles as the forced-reset screen; the copy changes when `must_change_password` is set. |
-| `GET /accounts/profile/` | `ProfileView` | Username, join date, change-password link. |
+| `GET/POST /accounts/password/change/` | `PasswordChangeView` | Doubles as the forced-reset screen; the copy changes when `must_change_password` is set. `form_valid` is inherited, not overridden — Django's own implementation already calls `form.save()` then `update_session_auth_hash(request, form.user)`, exactly the ordering step 4 requires. |
+| `GET /accounts/profile/` | `ProfileView` | Username, join date, change-password link. Also the interim target of `LOGIN_URL`/`LOGIN_REDIRECT_URL` below — task 02 has no home page yet. |
 
-**API** (`/api/auth/`)
+**API** (`/api/auth/`, `accounts/api_urls.py` — a separate module from the HTML routes above, mounted at a different prefix and sharing no views)
 
 | Route | Notes |
 |---|---|
-| `POST /api/auth/login/` | Session login for API clients. Throttled at 5/min per IP. |
-| `POST /api/auth/logout/` | |
+| `POST /api/auth/login/` | Session login for API clients. `csrf_protect` applied directly (see "Security notes"). Throttled at 5/min per IP (01.8). |
+| `POST /api/auth/logout/` | `permission_classes = [IsAuthenticated]`, overriding the project default so a forced-change user can still leave — also exempted in the middleware; see "The middleware". |
 | `GET /api/auth/me/` | Current user; includes `must_change_password`. |
-| `POST /api/auth/password/change/` | |
+| `POST /api/auth/password/change/` | Rejects an expired temp password as `old_password` (see "Temp password flow" step 5). |
+
+`config/settings/base.py` also sets, for this task: `AUTHENTICATION_BACKENDS =
+["accounts.backends.TempPasswordAwareBackend"]`; `LOGIN_URL` and `LOGIN_REDIRECT_URL` pointing
+at `accounts:profile` (interim — task 02 repoints these to a real home page);
+`LOGOUT_REDIRECT_URL = "accounts:login"`; and `SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"]`
+listing `IsAuthenticated` and `ForcePasswordChangeAPIPermission` — `/api/schema/` and
+`/api/docs/` set `permission_classes` directly and so bypass `DEFAULT_PERMISSION_CLASSES`
+entirely, requiring the same list to be repeated there.
 
 ## Login throttling
 
@@ -177,5 +193,17 @@ lever against a legitimate user.
 - The generated temp password is returned exactly once, in the admin's create-user response.
   It is never persisted, never emailed, never retrievable afterward.
 - Session cycling on password change is mandatory — otherwise a stolen session survives the
-  very reset that was meant to end it.
-- `LogoutView` is POST-only, and the login form is CSRF-protected by Django's middleware.
+  very reset that was meant to end it. `complete_password_change` also revokes every DRF
+  `authtoken.Token` for the user in the same transaction, for the same reason: a token has no
+  relationship to the password hash, so without this a leaked token would survive the reset
+  meant to end it. `set_temp_password` (an admin re-issuing a temp password) revokes tokens
+  too — every password-setting path is expected to route through a service that does this,
+  so a future admin create/reset flow (task 09) inherits it rather than rediscovering it.
+- `LogoutView` is POST-only. The HTML login form is CSRF-protected by Django's middleware;
+  `POST /api/auth/login/` additionally applies `django.views.decorators.csrf.csrf_protect`
+  directly, because DRF's `SessionAuthentication.enforce_csrf` only runs for a request that
+  already carries an authenticated session — an anonymous API login POST would otherwise never
+  be checked. One consequence: `csrf_protect` makes `POST /api/auth/login/` browser-only in
+  practice (a bearer token has no CSRF exposure and is exempt), and with no token-minting
+  endpoint yet, a headless/native client has no supported way to authenticate — the answer when
+  that is needed is a token-minting endpoint, not loosening CSRF.

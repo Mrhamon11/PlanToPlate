@@ -222,9 +222,11 @@ def test_drf_defaults_deny_by_default():
     from rest_framework.permissions import AllowAny, IsAuthenticated
     from rest_framework.settings import api_settings
 
+    from accounts.permissions import ForcePasswordChangeAPIPermission
+
     resolved = api_settings.DEFAULT_PERMISSION_CLASSES
 
-    assert resolved == [IsAuthenticated], resolved
+    assert resolved == [IsAuthenticated, ForcePasswordChangeAPIPermission], resolved
     assert AllowAny not in resolved
 
 
@@ -265,4 +267,8 @@ def test_prod_does_not_reenable_basic_authentication():
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     auth_classes = data["REST_FRAMEWORK"]["DEFAULT_AUTHENTICATION_CLASSES"]
-    assert auth_classes == ["rest_framework.authentication.SessionAuthentication"]
+    assert auth_classes == [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
+    ]
+    assert "rest_framework.authentication.BasicAuthentication" not in auth_classes

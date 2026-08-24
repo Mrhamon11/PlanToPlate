@@ -1,9 +1,8 @@
 """Login-throttle tests (subtask 01.8) are not here yet — they need the throttled login view
-that lands in that subtask. ``test_password_min_length_enforced`` and
-``test_no_registration_url_exists`` land in this iteration: the former needs only
-``AUTH_PASSWORD_VALIDATORS`` (subtask 01.3), and the latter asserts the *absence* of routes,
-so it needs no unimplemented view either.
+that lands in that subtask.
 """
+
+import logging
 
 import pytest
 from django.contrib.auth.password_validation import validate_password
@@ -59,3 +58,22 @@ def test_no_registration_url_exists():
     combined = " ".join(all_patterns).lower()
     assert "signup" not in combined
     assert "register" not in combined
+
+
+def test_password_not_in_logs(client, user_factory, caplog):
+    plain_password = "correct-horse-battery-staple"
+    user = user_factory(password=plain_password)
+
+    with caplog.at_level(logging.DEBUG):
+        client.post(
+            reverse("accounts:login"),
+            {"username": user.username, "password": plain_password},
+        )
+        client.post(
+            reverse("accounts:login"),
+            {"username": user.username, "password": "definitely-the-wrong-password"},
+        )
+
+    for record in caplog.records:
+        assert plain_password not in record.getMessage()
+        assert "definitely-the-wrong-password" not in record.getMessage()

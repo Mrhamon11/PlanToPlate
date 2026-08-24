@@ -30,7 +30,7 @@
   *Files:* `accounts/middleware.py`, `config/settings/base.py`
   *Done when:* no redirect loop, and the API branch returns JSON rather than HTML.
 
-- [ ] **01.6 — HTML auth views and templates**
+- [x] **01.6 — HTML auth views and templates**
   Login, logout (POST only), password change, profile. Templates extend the base from task 02;
   until that lands, a minimal standalone template is acceptable and gets restyled there.
   **The password-change view must call `update_session_auth_hash(request, user)` immediately
@@ -46,7 +46,7 @@
   log out if the exemption misses. Once it is mounted, delete `LOGOUT_PATH` and the
   `test_logout_exemption_matches_hardcoded_fallback` self-check, which skips until then.
 
-- [ ] **01.7 — API auth endpoints**
+- [x] **01.7 — API auth endpoints**
   `login`, `logout`, `me`, `password/change` under `/api/auth/`, with serializers.
   Also enable `TokenAuthentication` here — deferred from task 00 per decision D9. Add
   `rest_framework.authtoken` to `INSTALLED_APPS` and append `TokenAuthentication` to the
@@ -61,7 +61,7 @@
   design.md, "Temp password flow" step 3). Also add `POST /api/auth/password/change/` to the
   middleware's exempt-path list — by exact path, not an `/api/auth/` prefix — or a
   temp-password client has no reachable way to clear the condition.
-  *Files:* `accounts/api.py`, `accounts/serializers.py`, `accounts/urls.py`,
+  *Files:* `accounts/api.py`, `accounts/serializers.py`, `accounts/api_urls.py`,
   `config/settings/base.py`
   *Done when:* all four appear in `/api/docs/` and round-trip correctly, and a minted token
   authenticates an API request while `BasicAuthentication` remains disabled.
@@ -71,10 +71,41 @@
   *Files:* `config/settings/base.py`, `accounts/api.py`, `accounts/views.py`
   *Done when:* the sixth attempt in a minute returns 429.
 
+  Carried over from the 01.6/01.7 review — resolve here:
+  - **Size the throttle knowing a failed login costs ~239 ms of PBKDF2**, roughly double a
+    success. `accounts/forms.py` deliberately runs a dummy `set_password()` on the
+    `DoesNotExist` branch to equalise timing against user enumeration, so every failure pays
+    the hashing cost. An attacker burns double CPU per attempt; so does the server.
+  - **Nothing in CI guards that timing property.** `config/settings/test.py` uses
+    `MD5PasswordHasher`, which masks the difference — a regression that reintroduced the
+    2.2x enumeration oracle would not turn the suite red. If a guard is worth having, it
+    needs a PBKDF2-pinned test.
+  - **Tighten three assertions in `accounts/tests/test_services.py`** that would pass through
+    a regression: the in-memory-consistency assertions that run *after* `refresh_from_db()`,
+    which makes them tautological.
+
 - [ ] **01.9 — Bootstrap superuser command**
   `manage.py bootstrap_admin` creating the first admin with a printed temp password, so a
   fresh deployment has a way in. Idempotent — refuses politely if an admin already exists.
   *Files:* `accounts/management/commands/bootstrap_admin.py`
+
+  Carried over from the 01.6/01.7 review — resolve here:
+  - **`set_temp_password` mutates the caller's `User` instance before its `transaction.atomic()`
+    block and does not restore it if the write fails.** `complete_password_change` had the same
+    flaw and now restores state in an `except`; `set_temp_password` was left as-is because
+    nothing called it outside tests. **This command is its first real caller.** A caller that
+    catches the exception and later calls `user.save()` would commit a half-applied reset —
+    `must_change_password=True` paired with a temp password the admin was never shown, locking
+    the account with no way in. Fix it here, or mirror the `except` restore.
+  - **The restoration path does not clear `user._password`**, leaving a plaintext password on
+    the in-memory object if the exception comes from `save()` itself. Harmless today (no
+    configured validator implements `password_changed`), but it is why a hand-maintained
+    field mirror is fragile — `user.refresh_from_db()` in the `except` would be consistent by
+    construction.
+  - **Test-plan "Manual verification" step 1 becomes performable once this lands** — log in
+    with a generated temp password, confirm the forced-change screen appears and that no other
+    page is reachable until it is done. It could not be done during 01.6/01.7 because there was
+    no way to mint a temp password by hand; the flow is covered by automated tests meanwhile.
 
 - [ ] **01.10 — Update the living document**
   Task 01 → AWAITING APPROVAL.
