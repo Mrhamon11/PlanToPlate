@@ -11,6 +11,7 @@ security review found ``/admin/login/`` was throttled by none of them.
 """
 
 from django.http import HttpRequest, HttpResponse
+from django.template.loader import render_to_string
 from rest_framework.throttling import ScopedRateThrottle
 
 LOGIN_THROTTLE_SCOPE = "login"
@@ -33,12 +34,21 @@ def check_login_throttle(request: HttpRequest) -> HttpResponse | None:
     ``ScopedRateThrottle`` only reads ``request.META``/``request.headers``/``request.user``,
     all of which a plain request already provides, so no wrapping is needed to reuse it outside
     a DRF view.
+
+    Renders ``429.html`` (task 02.11 — deferred from 01.8/D25) rather than the bare
+    ``text/plain`` body this returned originally: a styled page that states the wait and says
+    outright that no account has been locked, since D25's whole design is that this throttle
+    never locks one. ``Retry-After`` is still set to the same integer the template renders
+    into its body, so an HTTP-aware client and a human reading the page agree on the wait.
     """
     throttle = ScopedRateThrottle()
     if throttle.allow_request(request, _LoginThrottleTarget()):
         return None
-    response = HttpResponse("Too many login attempts. Try again later.", status=429)
+
     wait = throttle.wait()
-    if wait is not None:
-        response["Retry-After"] = str(int(wait) + 1)
+    wait_seconds = int(wait) + 1 if wait is not None else None
+    body = render_to_string("429.html", {"wait_seconds": wait_seconds}, request=request)
+    response = HttpResponse(body, status=429)
+    if wait_seconds is not None:
+        response["Retry-After"] = str(wait_seconds)
     return response

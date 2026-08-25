@@ -65,9 +65,15 @@ Perform at 375px (phone), 768px (tablet), and 1440px (desktop), in both light an
 
 ## Definition of Done
 
-- [ ] Every automated test above exists and passes.
-- [ ] `ruff` clean; suite green.
-- [ ] All seven manual checks performed at all three widths and reported.
-- [ ] HTMX and Alpine are vendored — no CDN reference anywhere.
-- [ ] Task 01's auth screens are restyled onto `base.html`.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated.
+- [x] Every automated test above exists and passes.
+- [x] `ruff` clean; suite green.
+- [ ] All seven manual checks performed at all three widths and reported. **Not performed as
+      the formal 375/768/1440px × light/dark matrix.** The project owner instead tested live
+      against a real dev server and browser window, which surfaced three real defects the
+      formal checklist would likely have caught anyway (see `../MILESTONES.md`'s task 02 row
+      and `.review-findings.md` passes 5-6: H1, H2, H3) plus two smaller follow-ups (F1, F2).
+      Closed out on the owner's explicit approval despite this gap — recorded rather than
+      silently checked off, so a future session doesn't assume the full matrix ran.
+- [x] HTMX and Alpine are vendored — no CDN reference anywhere.
+- [x] Task 01's auth screens are restyled onto `base.html`.
+- [x] Subtasks ticked; `../MILESTONES.md` updated.

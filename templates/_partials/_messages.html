@@ -1,0 +1,14 @@
+{% comment %}
+The one hx-swap-oob target for flash messages (design.md, "Template architecture").
+
+Included normally inside base.html on a full page load, and re-rendered on its own by
+core.mixins.MessageMixin for a fragment HTMX response — hx-swap-oob="true" makes either case
+work the same way: htmx always swaps this div's content into the #messages element already on
+the page, whether or not this fragment is the "main" part of the response. On first page load,
+with no htmx swap in progress, the attribute is simply inert.
+{% endcomment %}
+<div id="messages" hx-swap-oob="true" role="status" aria-live="polite">
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+</div>

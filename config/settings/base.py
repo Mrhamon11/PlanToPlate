@@ -58,6 +58,9 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Must sit before ForcePasswordChangeMiddleware (wraps it) so an HTMX request that hits
+    # that middleware's redirect gets HX-Redirect rewriting too — see core/middleware.py.
+    "core.middleware.HtmxMiddleware",
     # Must come after AuthenticationMiddleware — it reads request.user.
     "accounts.middleware.ForcePasswordChangeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -143,7 +146,12 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
+# Unconditional as of task 02 (UI Shell): static/ is now a permanent, committed directory
+# (CSS, vendored htmx/Alpine), not one that might not exist yet. The old
+# `if (BASE_DIR / "static").exists() else []` guard was only ever needed pre-task-02, when no
+# static/ directory existed in the repo at all — STATICFILES_DIRS pointing at a nonexistent
+# path raises ImproperlyConfigured.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -169,9 +177,9 @@ AUTH_USER_MODEL = "accounts.User"
 AUTHENTICATION_BACKENDS = ["accounts.backends.TempPasswordAwareBackend"]
 
 LOGIN_URL = "accounts:login"
-# There is no dedicated "home" page until task 02 (UI Shell) lands — the profile view is the
-# nearest thing to one today, so both settings point there.
-LOGIN_REDIRECT_URL = "accounts:profile"
+# Task 02 (UI Shell) added the real home/dashboard page — LOGIN_REDIRECT_URL now points there
+# instead of the profile view, which was only ever a stand-in until this landed.
+LOGIN_REDIRECT_URL = "core:home"
 LOGOUT_REDIRECT_URL = "accounts:login"
 
 

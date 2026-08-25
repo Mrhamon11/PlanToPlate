@@ -1,0 +1,339 @@
+/* Buttons, forms, cards, tables, badges, the confirm-delete modal, empty states, and the
+   HTMX loading spinner. Every clickable element here is at least var(--tap-target) on its
+   smallest axis (design.md, "Touch parity"). */
+
+/* --- Buttons --- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+  min-width: var(--tap-target);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.2;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btn:hover {
+  filter: brightness(0.96);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-color: var(--color-accent);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+  border-color: var(--color-danger);
+}
+
+.btn-icon {
+  padding: var(--space-2);
+}
+
+/* --- Forms --- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.field .help-text {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.field .field-errors {
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+input,
+select,
+textarea {
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  width: 100%;
+}
+
+textarea {
+  min-height: calc(var(--tap-target) * 2);
+  resize: vertical;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: unset;
+  width: 1.25rem;
+  height: 1.25rem;
+  /* Padding alone can't reach 44px on a native checkbox without distorting it — the label it
+     sits in supplies the rest of the tap target instead (see label rule below). */
+}
+
+.field:has(input[type="checkbox"]),
+.field:has(input[type="radio"]) {
+  flex-direction: row;
+  align-items: center;
+  min-height: var(--tap-target);
+}
+
+.field.has-error input,
+.field.has-error select,
+.field.has-error textarea {
+  border-color: var(--color-danger);
+}
+
+/* --- Alerts (flash messages, see _partials/_messages.html) --- */
+
+.alert {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-inline-start-width: 4px;
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.alert + .alert {
+  margin-block-start: var(--space-2);
+}
+
+.alert-success {
+  border-inline-start-color: var(--color-success);
+}
+
+.alert-error {
+  border-inline-start-color: var(--color-danger);
+}
+
+.alert-warning {
+  border-inline-start-color: var(--color-warning);
+}
+
+.alert-info {
+  border-inline-start-color: var(--color-info);
+}
+
+/* --- Cards --- */
+
+.card {
+  display: block;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- Tables --- */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  min-width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+th {
+  color: var(--color-muted);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* --- Badges --- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.badge-danger {
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+}
+
+.badge-success {
+  background: var(--color-success);
+  color: var(--color-on-success);
+}
+
+/* --- Auth screens (login, password change, profile) --- */
+
+.auth-card {
+  max-width: 24rem;
+  margin-inline: auto;
+}
+
+/* --- Empty state --- */
+
+.empty-state {
+  text-align: center;
+  padding: var(--space-6) var(--space-3);
+  color: var(--color-muted);
+}
+
+.empty-state h1,
+.empty-state h2 {
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+
+/* --- Pagination --- */
+
+.pagination ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pagination a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-target);
+  min-width: var(--tap-target);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.pagination a:hover,
+.pagination a:focus-visible {
+  background: var(--color-surface-raised);
+}
+
+.pagination li[aria-current="page"] {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+/* --- Modal (used by _confirm_delete.html) --- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  z-index: 200;
+}
+
+.modal {
+  background: var(--color-surface-raised);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+  max-width: 32rem;
+  width: 100%;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* --- HTMX loading indicator ---
+   htmx toggles the "htmx-request" class on the element governed by hx-indicator (default: the
+   triggering element itself) while a request is in flight; .htmx-indicator is hidden by
+   default and shown only then, so no JavaScript is needed to drive it. */
+
+.htmx-indicator {
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: spin 0.6s linear infinite;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A submit disabled mid-request (hx-disabled-elt="this") must still read as disabled, not
+   just be unclickable. */
+[hx-disabled-elt] .btn:disabled,
+button:disabled {
+  opacity: 0.6;
+}

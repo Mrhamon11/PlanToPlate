@@ -1,20 +1,17 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>Profile — PlanToPlate</title>
-</head>
-<body>
-    <main>
-        <h1>{{ user.username }}</h1>
-        <p>Member since {{ user.date_joined|date:"F j, Y" }}</p>
+{% extends "base.html" %}
 
-        <p><a href="{% url 'accounts:password_change' %}">Change password</a></p>
+{% block title %}Profile — PlanToPlate{% endblock %}
+
+{% block content %}
+    <div class="card auth-card">
+        <h1>{{ user.username }}</h1>
+        <p class="text-muted">Member since {{ user.date_joined|date:"F j, Y" }}</p>
+
+        <p><a class="btn" href="{% url 'accounts:password_change' %}">Change password</a></p>
 
         <form method="post" action="{% url 'accounts:logout' %}">
             {% csrf_token %}
-            <button type="submit">Log out</button>
+            <button type="submit" class="btn btn-danger">Log out</button>
         </form>
-    </main>
-</body>
-</html>
+    </div>
+{% endblock %}

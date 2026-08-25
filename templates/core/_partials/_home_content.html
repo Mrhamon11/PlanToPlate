@@ -1,0 +1,30 @@
+{% comment %}
+The home dashboard's inner content — included by the full-page template and returned
+directly for an HTMX request to the same view (core.views.HomeView). Never extends base.html:
+this is a fragment.
+{% endcomment %}
+<h1>Welcome back, {{ user.username }}</h1>
+<p class="text-muted">Here's what's in PlanToPlate.</p>
+
+<div class="card-grid">
+    <div class="card">
+        <h2>Recipes</h2>
+        <p class="text-muted">Coming soon.</p>
+    </div>
+    <div class="card">
+        <h2>Dishes</h2>
+        <p class="text-muted">Coming soon.</p>
+    </div>
+    <div class="card">
+        <h2>Books</h2>
+        <p class="text-muted">Coming soon.</p>
+    </div>
+    <div class="card">
+        <h2>Lists</h2>
+        <p class="text-muted">Coming soon.</p>
+    </div>
+    <div class="card">
+        <h2>Planner</h2>
+        <p class="text-muted">Coming soon.</p>
+    </div>
+</div>

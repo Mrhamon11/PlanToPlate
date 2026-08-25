@@ -1,0 +1,18 @@
+{% comment %}
+Expects page_obj in context — the name Django's own ListView/Paginator already use, so a
+future list view needs no extra context wiring to use this. Query-string preservation beyond
+?page= is left to the view that includes this, once one exists.
+{% endcomment %}
+{% if page_obj.has_other_pages %}
+    <nav class="pagination" aria-label="Pagination">
+        <ul role="list">
+            {% if page_obj.has_previous %}
+                <li><a href="?page={{ page_obj.previous_page_number }}">Previous</a></li>
+            {% endif %}
+            <li aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</li>
+            {% if page_obj.has_next %}
+                <li><a href="?page={{ page_obj.next_page_number }}">Next</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+{% endif %}

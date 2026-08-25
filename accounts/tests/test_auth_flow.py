@@ -25,7 +25,7 @@ def test_login_success_redirects_to_home(client, user_factory):
     )
 
     assert response.status_code == 302
-    assert response.url == reverse("accounts:profile")
+    assert response.url == reverse("core:home")
     assert get_user(client).is_authenticated
 
 

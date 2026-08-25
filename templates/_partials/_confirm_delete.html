@@ -1,0 +1,21 @@
+{% comment %}
+Modal body reused by every destructive action (design.md, "Template architecture").
+
+Usage: include this partial "with object_name=... delete_url=... cancel_url=...".
+Loaded via hx-get into a modal target for JS users; the same fragment also renders as the
+content of a full "confirm delete" page for a no-JS fallback (the page just wraps this in
+base.html instead of a modal backdrop) so deleting something never depends on JavaScript.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-delete-title">
+        <h2 id="confirm-delete-title">Delete {{ object_name|default:"this item" }}?</h2>
+        <p>This cannot be undone.</p>
+        <form method="post" action="{{ delete_url }}">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-danger" hx-disabled-elt="this">Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
