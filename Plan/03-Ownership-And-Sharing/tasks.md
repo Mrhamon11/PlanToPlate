@@ -6,22 +6,22 @@ There is no domain model yet, so subtasks 03.1–03.8 are exercised against a th
 `core.tests.models.DummyOwned` registered only under test settings. Building the machinery
 against a stand-in keeps this task independent of task 04.
 
-- [ ] **03.1 — `Visibility` choices and `OwnedModel`**
+- [x] **03.1 — `Visibility` choices and `OwnedModel`**
   The abstract base from the design, including the owner-XOR-system check constraint.
   *Files:* `core/models.py`
   *Done when:* a concrete subclass migrates cleanly and the constraint rejects a system object
   that has an owner.
 
-- [ ] **03.2 — `OwnedQuerySet` / `OwnedManager`**
+- [x] **03.2 — `OwnedQuerySet` / `OwnedManager`**
   `visible_to()` and `editable_by()`, including the anonymous-user `.none()` path and `.distinct()`.
   *Files:* `core/managers.py`
   *Done when:* the visibility matrix tests pass.
 
-- [ ] **03.3 — Permission classes**
+- [x] **03.3 — Permission classes**
   `IsOwnerOrReadOnly`, `IsOwner`, `CanCopy`.
   *Files:* `core/permissions.py`
 
-- [ ] **03.4 — Dependency-graph traversal helper**
+- [x] **03.4 — Dependency-graph traversal helper**
   `walk_dependencies(obj)` — transitive, cycle-guarded, depth-capped. Shared by the sharing
   cascade and the copy service, and later by the recipe flattener.
   *Files:* `core/services/graph.py`

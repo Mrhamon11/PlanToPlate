@@ -1,0 +1,57 @@
+"""Fixtures shared by core's ownership/visibility/permission/graph tests.
+
+Standard cast, per Plan/03-Ownership-And-Sharing/test-plan.md: ``alice`` (owner), ``bob``
+(shared-with), ``carol`` (unrelated), ``admin`` (superuser — included because "even a
+superuser cannot get a system object through editable_by").
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from core.models import Visibility
+from core.tests.models import DummyNode, DummyOwned
+
+
+@pytest.fixture
+def alice(user_factory):
+    return user_factory(username="alice")
+
+
+@pytest.fixture
+def bob(user_factory):
+    return user_factory(username="bob")
+
+
+@pytest.fixture
+def carol(user_factory):
+    return user_factory(username="carol")
+
+
+@pytest.fixture
+def admin(user_factory):
+    return user_factory(username="admin", is_staff=True, is_superuser=True)
+
+
+@pytest.fixture
+def make_dummy(db):
+    """Factory fixture: build a persisted ``DummyOwned`` with sane defaults, overridable."""
+
+    def _make(**kwargs) -> DummyOwned:
+        defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
+        defaults.update(kwargs)
+        return DummyOwned.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def make_dummy_node(db):
+    """Factory fixture: build a persisted ``DummyNode``, for the dependency-graph tests."""
+
+    def _make(**kwargs) -> DummyNode:
+        defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
+        defaults.update(kwargs)
+        return DummyNode.objects.create(**defaults)
+
+    return _make
