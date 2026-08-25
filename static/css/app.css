@@ -1,0 +1,184 @@
+/* Design tokens, base typography, and page-level layout.
+   Component styles (buttons, forms, cards...) live in components.css; nav-specific rules in
+   nav.css. This file loads first so its custom properties are available to both. */
+
+:root {
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2rem;
+  --space-6: 3rem;
+
+  /* Light scheme (default). Dark-scheme overrides below redefine only what changes. */
+  --color-bg: #ffffff;
+  --color-surface: #f3f4f6;
+  --color-surface-raised: #ffffff;
+  --color-border: #d1d5db;
+  --color-text: #111827;
+  --color-muted: #4b5563;
+
+  --color-accent: #1d4ed8;
+  --color-on-accent: #ffffff;
+  --color-danger: #b91c1c;
+  --color-on-danger: #ffffff;
+  --color-success: #15803d;
+  --color-on-success: #ffffff;
+  --color-warning: #92400e;
+  --color-on-warning: #ffffff;
+  --color-info: #0e7490;
+  --color-on-info: #ffffff;
+
+  --radius: 0.5rem;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.08);
+
+  /* Every clickable element must be at least this large on the smallest axis — the app's one
+     hard touch-target rule (design.md, "Touch parity"). */
+  --tap-target: 44px;
+
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* prefers-color-scheme is the only theme switch this app has — no toggle, no stored
+   preference, so it must be correct on its own. Only tokens that actually change are
+   redefined; --space-*, --radius, --tap-target and --font-sans are scheme-independent. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f1115;
+    --color-surface: #1a1d23;
+    --color-surface-raised: #20242c;
+    --color-border: #3a3f4a;
+    --color-text: #f3f4f6;
+    --color-muted: #9ca3af;
+
+    /* Lighter than the light-scheme accent so it still reads against a dark background;
+       --color-on-accent flips to a dark foreground to match, since white-on-light-blue fails
+       contrast. Same reasoning for danger/success below. */
+    --color-accent: #60a5fa;
+    --color-on-accent: #0f1115;
+    --color-danger: #f87171;
+    --color-on-danger: #0f1115;
+    --color-success: #4ade80;
+    --color-on-success: #0f1115;
+    --color-warning: #fbbf24;
+    --color-on-warning: #0f1115;
+    --color-info: #67e8f9;
+    --color-on-info: #0f1115;
+
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+/* reset.css zeroes every margin (* { margin: 0 }); restore conservative flow spacing so
+   headings and paragraphs don't render flush against each other everywhere in the app. */
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+  margin-block-end: var(--space-3);
+}
+
+h2,
+h3,
+h4 {
+  margin-block-start: var(--space-4);
+}
+
+p {
+  margin-block-end: var(--space-3);
+}
+
+a {
+  color: var(--color-accent);
+}
+
+/* Visible focus is non-negotiable (design.md, "Accessibility") — this is the one rule that
+   applies to literally every focusable element, so it lives here rather than per component. */
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -3rem;
+  z-index: 100;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  transition: top 0.15s ease-in-out;
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}
+
+.container {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: var(--space-3);
+}
+
+/* Long recipe/dish/list names must never blow out the layout (design.md, "Edge cases"). */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-muted {
+  color: var(--color-muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+main {
+  padding-block: var(--space-4);
+  /* Reserves room above the bottom tab bar on mobile so the last row of content is never
+     hidden behind it; nav.css defines the bar's actual height via the same token. */
+  padding-bottom: calc(var(--tap-target) + var(--space-5));
+}
+
+@media (min-width: 640px) {
+  .container {
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    padding-inline: var(--space-5);
+  }
+
+  /* The bottom tab bar only exists below 1024px (nav.css) — desktop content needs no
+     reserved space for it. */
+  main {
+    padding-bottom: var(--space-4);
+  }
+}

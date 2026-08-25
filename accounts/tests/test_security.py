@@ -1,6 +1,7 @@
 """Security tests, including the login throttle (subtask 01.8)."""
 
 import logging
+import re
 import time
 from unittest.mock import patch
 
@@ -305,6 +306,57 @@ def test_throttle_window_is_approximately_one_minute(client, user_factory, monke
 
     assert response_after_window.status_code == 302
     assert get_user(client).is_authenticated
+
+
+def test_throttled_response_states_wait_and_no_lockout(client, user_factory):
+    """Pins the 429 response *contract* (task 02.11, deferred from 01.8/D25), not just its
+    status code — every other throttle test above only asserts ``status_code == 429``.
+    Driven through the real HTML login view, the same way the other throttle tests reach 429,
+    rather than calling ``check_login_throttle`` directly, so this also exercises
+    ``ThrottledLoginMixin`` and template rendering under a real ``request``.
+
+    Only one endpoint is exercised here, not all three from
+    ``test_all_three_login_endpoints_share_one_throttle_budget``: both
+    ``TempPasswordAwareLoginView`` and ``throttled_admin_login`` return
+    ``check_login_throttle(request)``'s ``HttpResponse`` completely unchanged — neither wraps,
+    re-renders, or otherwise touches it — so the response body/header contract is identical
+    regardless of which URL triggered it. That test already proves the two endpoints share the
+    underlying throttle state; this one only needs to prove what the shared function returns,
+    and duplicating it against ``/admin/login/`` would assert the same code path twice rather
+    than add coverage.
+
+    The exact wording of the "not locked out" sentence is deliberately not pinned — a copy-edit
+    to the template should not fail this test — but the substance (an account word and a
+    locked/not-locked word appearing together) is, since that is the actual security promise
+    from D25: the throttle never locks an account, and the page must keep saying so.
+    """
+    user = user_factory()
+
+    for _ in range(5):
+        response = client.post(
+            reverse("accounts:login"),
+            {"username": user.username, "password": "wrong-password"},
+        )
+        assert response.status_code == 200
+
+    throttled_response = client.post(
+        reverse("accounts:login"),
+        {"username": user.username, "password": "wrong-password"},
+    )
+
+    assert throttled_response.status_code == 429
+
+    assert "Retry-After" in throttled_response
+    retry_after = int(throttled_response["Retry-After"])
+    assert retry_after > 0
+
+    content = throttled_response.content.decode()
+    assert re.search(rf"\b{retry_after}\b", content), (
+        f"Retry-After header value {retry_after} does not appear in the rendered body"
+    )
+    assert re.search(r"no\s+account.{0,60}locked", content, re.IGNORECASE), (
+        "throttled response body does not state that no account was locked"
+    )
 
 
 def test_throttle_does_not_lock_the_account(client, user_factory):

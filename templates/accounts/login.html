@@ -1,40 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>Log in — PlanToPlate</title>
-</head>
-<body>
-    <main>
+{% extends "base.html" %}
+
+{% block title %}Log in — PlanToPlate{% endblock %}
+
+{% block content %}
+    <div class="card auth-card">
         <h1>Log in</h1>
 
         {% if form.non_field_errors %}
-            <ul class="errors">
+            <div class="alert alert-error" role="alert">
                 {% for error in form.non_field_errors %}
-                    <li>{{ error }}</li>
+                    <p>{{ error }}</p>
                 {% endfor %}
-            </ul>
+            </div>
         {% endif %}
 
         <form method="post" action="{% url 'accounts:login' %}">
             {% csrf_token %}
-            <p>
-                <label for="{{ form.username.id_for_label }}">Username</label>
-                {{ form.username }}
-                {% for error in form.username.errors %}
-                    <span class="error">{{ error }}</span>
-                {% endfor %}
-            </p>
-            <p>
-                <label for="{{ form.password.id_for_label }}">Password</label>
-                {{ form.password }}
-                {% for error in form.password.errors %}
-                    <span class="error">{{ error }}</span>
-                {% endfor %}
-            </p>
+            {% include "_partials/_form_field.html" with field=form.username %}
+            {% include "_partials/_form_field.html" with field=form.password %}
             <input type="hidden" name="next" value="{{ next }}">
-            <button type="submit">Log in</button>
+            <button type="submit" class="btn btn-primary">Log in</button>
         </form>
-    </main>
-</body>
-</html>
+    </div>
+{% endblock %}

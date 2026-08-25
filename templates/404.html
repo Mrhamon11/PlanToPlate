@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Not found — PlanToPlate{% endblock %}
+
+{% block content %}
+    <div class="empty-state">
+        <h1>404 — Page not found</h1>
+        <p>There's nothing here.</p>
+        <p><a class="btn btn-primary" href="{% url 'core:home' %}">Back to home</a></p>
+    </div>
+{% endblock %}

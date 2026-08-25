@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Too many attempts — PlanToPlate{% endblock %}
+
+{% block content %}
+    <div class="empty-state">
+        <h1>Too many login attempts</h1>
+        <p>
+            You've tried to log in too many times in a short period.
+            <strong>No account has been locked</strong> — this is a temporary slow-down, not a
+            lockout, and it clears on its own.
+        </p>
+        {% if wait_seconds %}
+            <p>Please wait {{ wait_seconds }} second{{ wait_seconds|pluralize }} and try again.</p>
+        {% else %}
+            <p>Please wait a little while and try again.</p>
+        {% endif %}
+    </div>
+{% endblock %}

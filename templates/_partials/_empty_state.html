@@ -1,0 +1,13 @@
+{% comment %}
+A generic "nothing here yet" block, parameterised rather than duplicated per list view.
+
+Usage: include this partial "with title=... message=... action_url=... action_label=...".
+Every variable is optional except title.
+{% endcomment %}
+<div class="empty-state">
+    <h2>{{ title|default:"Nothing here yet" }}</h2>
+    {% if message %}<p>{{ message }}</p>{% endif %}
+    {% if action_url %}
+        <p><a class="btn btn-primary" href="{{ action_url }}">{{ action_label|default:"Get started" }}</a></p>
+    {% endif %}
+</div>

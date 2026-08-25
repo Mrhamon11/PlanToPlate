@@ -1,0 +1,34 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}PlanToPlate{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/reset.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'css/nav.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+{% comment %}
+hx-headers is read by every htmx request this page issues, so the CSRF token only needs
+setting once here rather than on every individual hx-post/hx-delete attribute (design.md,
+"HTMX conventions"). csrf_token is always in scope for a RequestContext — Django adds its
+csrf processor to every template render regardless of the TEMPLATES OPTIONS list.
+{% endcomment %}
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    {% include "_partials/_nav.html" %}
+
+    <main id="main-content" class="container">
+        {% include "_partials/_messages.html" %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{% static 'js/htmx.min.js' %}"></script>
+    <script src="{% static 'js/alpine.min.js' %}" defer></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

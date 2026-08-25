@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Something went wrong — PlanToPlate</title>
+    {% comment %}
+    Deliberately standalone — no extends tag, no static tag, no request-dependent tag.
+    Django's own server_error view renders this with template.render() and no context and
+    no request at all, so no context processor (auth, messages, or anything a future one
+    adds) ever runs for this template — and the whole reason we might be here is that
+    something in the request/response pipeline just failed. A dependency on any of that
+    machinery would risk this page failing too, at the exact moment nothing else is
+    available to show the user anything at all. Styled with an inlined style block for
+    the same reason: no dependency on static file resolution succeeding.
+    {% endcomment %}
+    <style>
+        :root {
+            color-scheme: light dark;
+            --color-bg: #ffffff;
+            --color-text: #111827;
+            --color-muted: #4b5563;
+            --color-accent: #1d4ed8;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-bg: #0f1115;
+                --color-text: #f3f4f6;
+                --color-muted: #9ca3af;
+                --color-accent: #60a5fa;
+            }
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--color-bg);
+            color: var(--color-text);
+        }
+        main { max-width: 32rem; text-align: center; }
+        h1 { margin: 0 0 0.75rem; }
+        p { color: var(--color-muted); margin: 0 0 1rem; }
+        a {
+            color: #ffffff;
+            background: var(--color-accent);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 0 1rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+        }
+        a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 2px; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Something went wrong</h1>
+        <p>An unexpected error occurred. It's been logged, and nothing you did caused it.</p>
+        <a href="/">Back to home</a>
+    </main>
+</body>
+</html>
