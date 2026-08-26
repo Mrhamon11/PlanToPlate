@@ -126,11 +126,24 @@ the single most likely serious bug in the project.
 
 ## Definition of Done
 
-- [ ] Every test above exists and passes; the visibility matrix is exhaustive.
-- [ ] `ruff` clean; full suite green.
-- [ ] A private object returns **404**, never 403, to a user who cannot see it.
-- [ ] A non-owner cannot share, under any endpoint, for any model.
-- [ ] Copies are independent, private, atomic, and carry no stats.
+- [ ] Every test above exists and passes; the visibility matrix is exhaustive. (Sharing
+      service, Copy service, Serializers, and IDOR matrix sections — the 03.5-03.8 scope — are
+      each fully present and passing; the Regression guard section is not — see below — so this
+      item is left unchecked overall.)
+- [x] `ruff` clean; full suite green. (306 passed, `ruff check` and `ruff format --check` clean.)
+- [x] A private object returns **404**, never 403, to a user who cannot see it. (Verified for
+      plain CRUD and for `share`/`unshare`/`copy`/`shares`.)
+- [x] A non-owner cannot share, under any endpoint, for any model. (Service layer and viewset
+      layer, both for `share` and `unshare`.)
+- [x] Copies are independent, private, atomic, and carry no stats. (No stats model exists yet;
+      correctly and explicitly deferred per `test_copying.py`'s own docstring.)
 - [ ] The convention tests in `test_conventions.py` pass — they are what protects later tasks.
+      (The file does not exist. Not one of the 8 claimed fixes for this iteration and not raised
+      as blocking by either reviewer, but it is an explicit, unmet Definition of Done line — see
+      tester findings below. Tracked as `tasks.md` 03.8a / NB3, to be closed out during the
+      03.9–03.12 window per the project owner's 2026-08-25 call — not dropped.)
 - [ ] `core/README.md` exists and is accurate enough for task 04 to follow unaided.
+- [ ] `tasks.md` 03.8a is fully addressed (NB3 convention tests, NB4 force-password-change
+      coverage at the `core/` level, NB5 `_DEFAULT_PERMISSIONS` import-time snapshot, NB10's
+      weak IDOR assertion) — carried over from the 03.5–03.8 review rather than dropped.
 - [ ] Subtasks ticked; `../MILESTONES.md` updated.

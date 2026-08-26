@@ -16,6 +16,13 @@ from .base import *  # noqa: E402, F403
 
 DEBUG = False
 
+# Task 03 (Ownership & Sharing) has no real domain model to test OwnedModel against yet — task
+# 04 adds the first one. core/tests/models.py declares throwaway concrete subclasses,
+# registered as their own app (core/tests/apps.py) so Django loads them exactly like any other
+# installed app's models. Appended only here so these tables never exist outside the test
+# database. See Plan/03-Ownership-And-Sharing/tasks.md, 03.1's note.
+INSTALLED_APPS = [*INSTALLED_APPS, "core.tests"]  # noqa: F405
+
 # Defined outright rather than patching base.DATABASES in place. Patching only NAME would
 # leave ENGINE (and OPTIONS) inherited from whatever DATABASE_URL resolved to in base.py — if
 # a developer points DATABASE_URL at a real Postgres server to check the portability promise

@@ -221,6 +221,39 @@ th {
   color: var(--color-on-success);
 }
 
+/* --- Ownership badges (_partials/_ownership_badge.html) ---
+   "Shared with me" deliberately reuses the plain .badge above rather than getting its own
+   modifier: it's the elimination case (not mine, not system, not public), so a neutral badge
+   is correct — the other three each get a distinct treatment. */
+
+.badge-mine {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.badge-public {
+  background: var(--color-info);
+  color: var(--color-on-info);
+}
+
+.badge-system {
+  background: var(--color-surface-raised);
+  color: var(--color-muted);
+  border: 1px solid var(--color-border);
+}
+
+/* --- Copy provenance / copy button (_partials/_copied_from.html, _copy_button.html) --- */
+
+.copied-from {
+  margin-top: var(--space-1);
+  font-size: 0.875rem;
+}
+
+.copy-form {
+  display: inline-block;
+  margin: 0;
+}
+
 /* --- Auth screens (login, password change, profile) --- */
 
 .auth-card {
@@ -302,6 +335,55 @@ th {
   justify-content: flex-end;
   gap: var(--space-2);
   margin-top: var(--space-4);
+}
+
+/* --- Share modal (_partials/_share_modal.html) --- */
+
+.share-form fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--space-3) 0;
+}
+
+.share-form legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: var(--space-1);
+}
+
+.share-form fieldset label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+}
+
+.share-current {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.share-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.share-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+}
+
+/* The revoke button's own <form> must not add flow spacing inside a flex row. */
+.share-list-item form {
+  margin: 0;
 }
 
 /* --- HTMX loading indicator ---

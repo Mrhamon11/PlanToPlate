@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.urls import NoReverseMatch
 from rest_framework.permissions import BasePermission
 
 from accounts.middleware import api_password_change_path
@@ -31,4 +32,15 @@ class ForcePasswordChangeAPIPermission(BasePermission):
         user = request.user
         if not user.is_authenticated or not user.must_change_password:
             return True
-        return request.path == api_password_change_path()
+        try:
+            exempt_path = api_password_change_path()
+        except NoReverseMatch:
+            # Fail closed (03.8a / NB4): if the exempt path cannot even be resolved — a
+            # partial URLconf missing accounts_api, e.g. a test-only router, or a genuinely
+            # broken deployment — deny rather than let an unresolvable check silently mean
+            # "everywhere is exempt." A crashing NoReverseMatch here previously surfaced as an
+            # unhandled 500 instead of a clean denial, which is worse in exactly the same
+            # direction every other rule in this file protects against: ambiguity resolving to
+            # more access, not less.
+            return False
+        return request.path == exempt_path

@@ -10,9 +10,9 @@ from collections.abc import Callable
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 
 HEALTHZ_PATH = "/healthz/"
 
@@ -76,17 +76,40 @@ class ForcePasswordChangeMiddleware:
 
         if request.path.startswith("/api/"):
             return JsonResponse({"detail": "password_change_required"}, status=403)
-        return redirect(reverse("accounts:password_change"))
+        try:
+            redirect_target = reverse("accounts:password_change")
+        except NoReverseMatch:
+            # Same fail-closed posture as _is_exempt() below: a URLconf that doesn't mount
+            # accounts.urls (e.g. a test-only router) must deny rather than 500. There is no
+            # HTML form to redirect to, so this denies the request outright instead of
+            # crashing with an unhandled NoReverseMatch.
+            return HttpResponseForbidden("password_change_required")
+        return redirect(redirect_target)
 
     @staticmethod
     def _is_exempt(path: str) -> bool:
-        exempt_paths = {
-            reverse("accounts:password_change"),
-            reverse("accounts:logout"),
-            HEALTHZ_PATH,
-            api_password_change_path(),
-            api_logout_path(),
-        }
+        """Every exemption is reversed defensively (03.8a rework, non-blocking finding 4 —
+        the same fail-open-under-a-partial-URLconf landmine NB4 already fixed one layer down in
+        ``accounts.permissions.ForcePasswordChangeAPIPermission``): a URLconf that mounts
+        ``accounts.urls`` but not ``accounts.api_urls`` (e.g. a test-only router) would
+        otherwise turn a should-be-exempt request into an unhandled ``NoReverseMatch`` 500
+        instead of the redirect/403 this middleware means to return. A name that fails to
+        reverse is simply not added to the exempt set — it denies that specific path rather
+        than crashing, which is the same "ambiguity resolves to less access, not more" rule
+        every fail-closed check in this app follows.
+        """
+        exempt_paths = {HEALTHZ_PATH}
+        for reverse_exempt_path in (
+            lambda: reverse("accounts:password_change"),
+            lambda: reverse("accounts:logout"),
+            api_password_change_path,
+            api_logout_path,
+        ):
+            try:
+                exempt_paths.add(reverse_exempt_path())
+            except NoReverseMatch:
+                continue
+
         if path in exempt_paths:
             return True
 
