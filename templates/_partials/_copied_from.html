@@ -1,0 +1,28 @@
+{% comment %}
+Copy provenance line (design.md, "UI": "A provenance line on copies: 'Copied from Alice's Roast
+Chicken.'"). Renders nothing for an object that isn't a copy, and nothing once the original has
+been deleted — `copied_from` is `SET_NULL` (design.md, "Deleting a shared object": "other
+people's copies survive with the provenance link cleared"), so a surviving copy's provenance
+line cleanly disappears rather than dangling on a deleted object.
+
+A copy of a *system* object (design.md's own named use case: copying a seeded ingredient, e.g.
+"Sea Salt", to make an editable version) has `copied_from.owner = NULL` — the owner-XOR-system
+constraint — since `core/services/copying.py` sets `copied_from` unconditionally regardless of
+whether the original was system-seeded or user-owned. Branching on `is_system` avoids rendering
+the owner clause against a null owner.
+
+Usage: include this partial "with object=...". No visibility check is needed here beyond the
+one every template already relies on: `object` itself is already visible to the current viewer
+by the time it reaches a template (core/mixins.py's OwnedObjectMixin, or the API's own
+queryset), and `copied_from`/its `owner` are read-only provenance about that same object, not a
+new object being disclosed.
+{% endcomment %}
+{% if object.copied_from %}
+    <p class="text-muted copied-from">
+        {% if object.copied_from.is_system %}
+            Copied from the built-in {{ object.copied_from }}.
+        {% else %}
+            Copied from {{ object.copied_from.owner.username }}&rsquo;s {{ object.copied_from }}.
+        {% endif %}
+    </p>
+{% endif %}

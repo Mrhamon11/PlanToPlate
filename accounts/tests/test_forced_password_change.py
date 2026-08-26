@@ -33,6 +33,51 @@ def test_temp_password_user_redirected_to_change(client, user_factory):
     assert response.url == reverse("accounts:password_change")
 
 
+@pytest.mark.urls("core.tests.urls")
+def test_exempt_check_fails_closed_under_a_partial_urlconf(client, user_factory):
+    """core.tests.urls mounts accounts.urls but not accounts.api_urls (see its own docstring) --
+    the same landmine 03.8a's NB4 fixed one layer down in
+    accounts.permissions.ForcePasswordChangeAPIPermission. Pre-fix, ``_is_exempt`` reversed
+    ``accounts_api:password-change``/``accounts_api:logout`` unguarded and this request 500'd
+    with ``NoReverseMatch`` instead of redirecting; post-fix it must redirect cleanly, exactly
+    like ``test_temp_password_user_redirected_to_change`` does under the real URLconf.
+    """
+    user = user_factory(must_change_password=True)
+    client.force_login(user)
+
+    response = client.get("/some/unrouted/path/")
+
+    assert response.status_code == 302
+    assert response.url == reverse("accounts:password_change")
+
+
+def test_redirect_target_fails_closed_when_it_cannot_reverse(client, user_factory, monkeypatch):
+    """The NB4-style guard in ``_is_exempt()`` only covers the *exemption lookup* -- the
+    redirect *target* built afterwards (``reverse("accounts:password_change")``, the line right
+    below it) was still unguarded, the same landmine moved one line down (03.8a rework
+    iteration-3 review, non-blocking finding 5). Pre-fix, a URLconf where that name genuinely
+    cannot resolve made this request 500 with an unhandled ``NoReverseMatch`` even though
+    ``_is_exempt()`` had already failed safe; post-fix it denies with a plain 403 instead of
+    crashing -- there is no HTML form left to redirect to.
+    """
+    import accounts.middleware as middleware_module
+
+    real_reverse = middleware_module.reverse
+
+    def fake_reverse(viewname, *args, **kwargs):
+        if viewname == "accounts:password_change":
+            raise middleware_module.NoReverseMatch(viewname)
+        return real_reverse(viewname, *args, **kwargs)
+
+    monkeypatch.setattr(middleware_module, "reverse", fake_reverse)
+    user = user_factory(must_change_password=True)
+    client.force_login(user)
+
+    response = client.get("/some/unrouted/path/")
+
+    assert response.status_code == 403
+
+
 def test_change_form_itself_not_redirected(client, user_factory):
     user = user_factory(must_change_password=True)
     client.force_login(user)

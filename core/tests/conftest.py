@@ -10,7 +10,16 @@ from __future__ import annotations
 import pytest
 
 from core.models import Visibility
-from core.tests.models import DummyDivergentNode, DummyNode, DummyOwned
+from core.tests.models import (
+    DummyComponent,
+    DummyContainer,
+    DummyDivergentNode,
+    DummyJoinedComponent,
+    DummyJoinedContainer,
+    DummyJoinedLeaf,
+    DummyNode,
+    DummyOwned,
+)
 
 
 @pytest.fixture
@@ -68,5 +77,72 @@ def make_dummy_divergent_node(db):
         defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
         defaults.update(kwargs)
         return DummyDivergentNode.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def make_dummy_container(db):
+    """Factory fixture: build a persisted ``DummyContainer``, whose children are reached only
+    through the reverse side of ``DummyComponent`` (the real task-05+ container shape).
+    """
+
+    def _make(**kwargs) -> DummyContainer:
+        defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
+        defaults.update(kwargs)
+        return DummyContainer.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def make_dummy_component(db):
+    """Factory fixture: build a persisted ``DummyComponent`` linking a ``DummyContainer`` to a
+    child ``DummyContainer`` through the plain, non-owned join model.
+    """
+
+    def _make(**kwargs) -> DummyComponent:
+        return DummyComponent.objects.create(**kwargs)
+
+    return _make
+
+
+@pytest.fixture
+def make_dummy_joined_container(db):
+    """Factory fixture: build a persisted ``DummyJoinedContainer`` — the real container half of
+    the two-parent join model shape (``RecipeComponent.recipe``/``.ingredient``).
+    """
+
+    def _make(**kwargs) -> DummyJoinedContainer:
+        defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
+        defaults.update(kwargs)
+        return DummyJoinedContainer.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def make_dummy_joined_leaf(db):
+    """Factory fixture: build a persisted ``DummyJoinedLeaf`` — the genuine-leaf half of the
+    same two-parent join model shape, reached only through the join model's *other* FK.
+    """
+
+    def _make(**kwargs) -> DummyJoinedLeaf:
+        defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
+        defaults.update(kwargs)
+        return DummyJoinedLeaf.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def make_dummy_joined_component(db):
+    """Factory fixture: build a persisted ``DummyJoinedComponent`` linking a
+    ``DummyJoinedContainer`` to a ``DummyJoinedLeaf`` through the plain, non-owned,
+    two-parent join model.
+    """
+
+    def _make(**kwargs) -> DummyJoinedComponent:
+        return DummyJoinedComponent.objects.create(**kwargs)
 
     return _make

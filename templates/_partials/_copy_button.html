@@ -1,0 +1,23 @@
+{% comment %}
+"Copy to my collection" button (design.md, "UI"). Shown on any object the current user does not
+own — including a system object, which anyone may copy (design.md: "the copy is fully editable
+— the seeded-ingredient use case"). A copy is always independent and private regardless of the
+original's visibility (core/services/copying.py), so this button never needs to ask anything
+about visibility itself.
+
+Usage: include this partial "with object=... copy_url=...". `copy_url` is that object's REST
+`/copy/` action (core/viewsets.py, OwnedViewSetMixin) — every domain app wires this once it
+registers its viewset (see core/README.md). Renders nothing for an object the user already
+owns, so the caller does not need its own ownership check before including this partial.
+
+`user.is_authenticated` is checked explicitly, not just `object.owner_id != user.id` — without
+it, a render missing `user` from its context (Django's default `string_if_invalid` is `""`)
+would make that comparison true for anyone, including the object's own owner, and show "Copy to
+my collection" on their own object.
+{% endcomment %}
+{% if user.is_authenticated and object.owner_id != user.id %}
+    <form method="post" action="{{ copy_url }}" class="copy-form">
+        {% csrf_token %}
+        <button type="submit" class="btn" hx-disabled-elt="this">Copy to my collection</button>
+    </form>
+{% endif %}

@@ -1,0 +1,24 @@
+{% comment %}
+Ownership badge (design.md, "UI": "An ownership badge — Mine / Shared with me / Public /
+Built-in").
+
+Usage: include this partial "with object=...". No second visibility check happens here — by
+the time an object reaches a template at all it has already passed `.visible_to(user)`
+(core/mixins.py's OwnedObjectMixin for HTML views, or the API's own queryset), so these four
+states are mutually exclusive and exhaustive: is_system, mine, public, or — by elimination,
+since nothing else would have let the object through — shared with me.
+
+`user.is_authenticated` is checked alongside `object.owner_id == user.id` — without it, a
+render missing `user` from its context (Django's default `string_if_invalid` is `""`) would
+make that comparison false even for the object's real owner, understating the badge rather than
+overstating it, but wrong either way.
+{% endcomment %}
+{% if object.is_system %}
+    <span class="badge badge-system">Built-in</span>
+{% elif user.is_authenticated and object.owner_id == user.id %}
+    <span class="badge badge-mine">Mine</span>
+{% elif object.visibility == "PUBLIC" %}
+    <span class="badge badge-public">Public</span>
+{% else %}
+    <span class="badge">Shared with me</span>
+{% endif %}

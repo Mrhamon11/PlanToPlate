@@ -1,8 +1,8 @@
 """View mixins shared by every screen (design.md, "Base view helpers").
 
-``HtmxTemplateMixin`` and ``MessageMixin`` are the two pieces every HTMX-backed view needs;
-``OwnedObjectMixin`` is a deliberately empty placeholder so task 03's views land onto an
-existing name instead of each later task inventing its own.
+``HtmxTemplateMixin`` and ``MessageMixin`` are the two pieces every HTMX-backed view needs.
+``OwnedObjectMixin`` (03.9) is the HTML-side counterpart of ``core.viewsets.OwnedViewSetMixin``
+— see its own docstring below for what it does.
 """
 
 from __future__ import annotations
@@ -10,8 +10,21 @@ from __future__ import annotations
 from typing import Any
 
 from django.contrib import messages
+from django.core.exceptions import ImproperlyConfigured, PermissionDenied
+from django.db.models import QuerySet
+from django.forms import BaseModelForm
 from django.http import HttpRequest
 from django.template.loader import render_to_string
+
+from core.permissions import IsOwnerOrReadOnly
+
+# The HTML-side counterpart of core/serializers.py's OwnedSerializer read-only fields (see that
+# module's docstring). A ModelForm that exposes any of these gives its owner a write path
+# straight to sharing/provenance state that skips core/services/sharing.py's cascade-refusal
+# check entirely -- the same hole a writable `visibility` on OwnedSerializer would open.
+UNSAFE_OWNED_MODEL_FORM_FIELDS = frozenset(
+    {"owner", "is_system", "shared_with", "copied_from", "visibility"}
+)
 
 
 class HtmxTemplateMixin:
@@ -72,10 +85,70 @@ class MessageMixin:
 
 
 class OwnedObjectMixin:
-    """Placeholder for task 03 (Ownership & Sharing).
+    """The HTML-view counterpart of ``OwnedViewSetMixin`` (core/viewsets.py) — the same two-
+    layer defence design.md's "Permissions" section requires, applied to Django's generic
+    class-based views (``ListView``, ``DetailView``, ``UpdateView``, ``DeleteView``) instead of
+    a DRF viewset, so template-rendered screens have no second, weaker path to owned data
+    (MILESTONES.md section 6).
 
-    Declared now, empty, so views written in tasks 04+ can already compose against
-    ``core.mixins.OwnedObjectMixin`` — task 03 fills this in with the ``.visible_to(user)``
-    queryset scoping and object-level write checks described in ``MILESTONES.md`` section 6,
-    rather than each later view inventing its own ownership filter in the meantime.
+    Mix in ahead of the Django generic view class, e.g.::
+
+        class RecipeDetailView(OwnedObjectMixin, DetailView):
+            model = Recipe
+
+    ``get_queryset()`` is the primary defence: every ``ListView``/``DetailView``/``UpdateView``/
+    ``DeleteView`` built on this mixin only ever sees ``.visible_to(request.user)`` — an object
+    outside that set never reaches the view at all, and ``get_object()`` 404s on it exactly like
+    a missing row would, which is what keeps a private object's non-existence indistinguishable
+    from someone else's private object (design.md, "Enumeration").
+
+    ``get_object()`` adds the secondary defence: reusing ``IsOwnerOrReadOnly`` directly, the
+    exact permission class ``OwnedViewSetMixin`` uses for the API's plain CRUD verbs, rather
+    than re-deriving the same "owner-only for unsafe methods" rule a second time (MILESTONES.md
+    section 6: "never implement the same rule twice"). ``IsOwnerOrReadOnly`` only ever reads
+    ``request.method`` and ``request.user``, both of which a plain Django ``HttpRequest`` has,
+    so it works unmodified against ``self.request`` here — no DRF request wrapper needed. A
+    GET against an object merely shared with (not owned by) the requester still succeeds, since
+    GET is a safe method; a POST (the only verb an HTML ``<form>`` sends — this also covers an
+    htmx ``hx-put``/``hx-delete`` on the same object, since the check is keyed on
+    ``request.method`` generally, not a hardcoded "POST") from a non-owner raises
+    ``PermissionDenied``, which Django renders as this project's styled 403 page.
     """
+
+    request: HttpRequest
+
+    def get_queryset(self) -> QuerySet:
+        return super().get_queryset().visible_to(self.request.user)
+
+    def get_object(self, queryset: QuerySet | None = None) -> Any:
+        obj = super().get_object(queryset)
+        if not IsOwnerOrReadOnly().has_object_permission(self.request, self, obj):
+            raise PermissionDenied(f"You do not have permission to modify {obj!r}.")
+        return obj
+
+    def get_form_class(self) -> type[BaseModelForm]:
+        """Refuses, at ``manage.py check``/first-request time rather than silently, a
+        ``CreateView``/``UpdateView`` whose form exposes ``owner``, ``is_system``,
+        ``shared_with``, ``copied_from``, or ``visibility`` as a writable field — the HTML
+        counterpart of ``OwnedSerializer`` making those same fields read-only
+        (``core/serializers.py``). A bare ``fields = "__all__"`` on a form built over an
+        ``OwnedModel`` subclass is exactly how this reopens: the owner (who legitimately passes
+        ``IsOwnerOrReadOnly`` above) could then ``POST`` a new ``visibility``/``shared_with``
+        straight past ``core/services/sharing.py``'s cascade-refusal check, publishing a
+        container with a hole the sharing service exists to prevent.
+
+        Only ``FormMixin``-based views (``CreateView``/``UpdateView``) ever call this — a
+        ``ListView``/``DetailView``/``DeleteView`` built on this same mixin has no form and
+        never triggers it.
+        """
+        form_class = super().get_form_class()
+        exposed = UNSAFE_OWNED_MODEL_FORM_FIELDS & set(getattr(form_class, "base_fields", {}))
+        if exposed:
+            raise ImproperlyConfigured(
+                f"{type(self).__name__}'s form exposes {sorted(exposed)} as writable field(s). "
+                "These bypass core.services.sharing's cascade-refusal check the same way a "
+                "writable `visibility` on OwnedSerializer would (see core/serializers.py). "
+                "Exclude them from `fields`/`form_class` -- visibility and sharing changes must "
+                "go through the /share/ view or API action instead."
+            )
+        return form_class

@@ -11,9 +11,11 @@ from django.db.models import QuerySet
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.settings import api_settings
+from rest_framework.views import APIView
 
 from core.filters import OwnedObjectFilterBackend
 from core.models import Visibility
@@ -33,11 +35,18 @@ User = get_user_model()
 # merge them with ``DEFAULT_PERMISSION_CLASSES``/``DEFAULT_FILTER_BACKENDS`` from settings.
 # Every place below that sets either therefore composes with the project defaults explicitly
 # (``config/settings/base.py``'s own comment on ``SERVE_PERMISSIONS`` documents the same
-# pitfall). Setting a bare list here would silently drop ``IsAuthenticated`` and
-# ``ForcePasswordChangeAPIPermission`` from every owned endpoint — anonymous access on
-# resources that are supposed to require login, and a temp-password holder who should be
-# locked out of everything but the password-change endpoint getting unrestricted API access.
-_DEFAULT_PERMISSIONS = list(api_settings.DEFAULT_PERMISSION_CLASSES)
+# pitfall). Composing with a list baked in once at import time would silently drop
+# ``IsAuthenticated`` and ``ForcePasswordChangeAPIPermission`` from every owned endpoint the
+# moment a test (or, in principle, a settings reload) changed ``DEFAULT_PERMISSION_CLASSES``
+# after this module first loaded (03.8a / NB5) — ``get_permissions()`` below reads
+# ``api_settings.DEFAULT_PERMISSION_CLASSES`` fresh on every call instead.
+_ACTION_PERMISSION_CLASSES: dict[str, type[BasePermission]] = {
+    "share": IsOwner,
+    "unshare": IsOwner,
+    # shares audience list is as sensitive as share/unshare — see the `shares` action itself.
+    "shares": IsOwner,
+    "copy": CanCopy,
+}
 
 
 class _ShareRequestSerializer(drf_serializers.Serializer):
@@ -73,13 +82,48 @@ class OwnedViewSetMixin:
     itself sensitive), and ``copy`` is allowed for anyone who can see the object (``CanCopy``).
     """
 
-    permission_classes = [*_DEFAULT_PERMISSIONS, IsOwnerOrReadOnly]
     filter_backends = [*api_settings.DEFAULT_FILTER_BACKENDS, OwnedObjectFilterBackend]
+
+    def get_permissions(self) -> list[BasePermission]:
+        """Composes three layers, always additively, never as a replacement of one another:
+
+        1. The project's ``DEFAULT_PERMISSION_CLASSES`` — read live from ``api_settings`` on
+           every call, not a snapshot taken once at import time.
+        2. This mixin's own action-keyed baseline: ``IsOwner`` for the three owner-only
+           actions, ``CanCopy`` for ``copy``, ``IsOwnerOrReadOnly`` for every plain CRUD verb.
+           This is the object-level guard that actually gates writes and the sensitive
+           ``/shares/`` read — it must never be displaced by an explicit override, only added
+           to, or a viewset that declares its own ``permission_classes`` for an unrelated
+           reason (e.g. to require staff on top of ownership) would silently lose ownership
+           enforcement entirely.
+        3. An explicit ``permission_classes`` declaration, if any — a subclass's class
+           attribute, or an ``@action(..., permission_classes=[...])`` kwarg (Django's
+           ``View.__init__`` setattrs an action's initkwargs onto the instance, which is how
+           DRF's router wires per-action overrides). Detected by identity against
+           ``APIView.permission_classes`` (the un-overridden default every ``APIView``
+           inherits).
+
+        Layer 3 is appended on top of layer 2, not substituted for it: a declared override can
+        only ever tighten what the mixin already requires, exactly as ``core/README.md``
+        documents. The earlier shape of this method treated an explicit declaration as
+        *replacing* layer 2 outright, which silently dropped ``IsOwnerOrReadOnly``/``IsOwner``
+        the moment any subclass or ``@action`` declared its own ``permission_classes`` for any
+        reason — reopening the flagship IDOR this mixin exists to close.
+
+        DRF calls this fresh on every request (``APIView.initial()``, after ``self.action`` is
+        already set), so there is no caching to go stale either.
+        """
+        action_name = getattr(self, "action", None)
+        extra_permission_classes = [_ACTION_PERMISSION_CLASSES.get(action_name, IsOwnerOrReadOnly)]
+        if self.permission_classes is not APIView.permission_classes:
+            extra_permission_classes.extend(self.permission_classes)
+        permission_classes = [*api_settings.DEFAULT_PERMISSION_CLASSES, *extra_permission_classes]
+        return [permission_class() for permission_class in permission_classes]
 
     def get_queryset(self) -> QuerySet[OwnedModel]:
         return super().get_queryset().visible_to(self.request.user)
 
-    @action(detail=True, methods=["post"], permission_classes=[*_DEFAULT_PERMISSIONS, IsOwner])
+    @action(detail=True, methods=["post"])
     def share(self, request: Request, pk: str | None = None) -> Response:
         obj = self.get_object()
         serializer = _ShareRequestSerializer(data=request.data)
@@ -101,7 +145,7 @@ class OwnedViewSetMixin:
             }
         )
 
-    @action(detail=True, methods=["post"], permission_classes=[*_DEFAULT_PERMISSIONS, IsOwner])
+    @action(detail=True, methods=["post"])
     def unshare(self, request: Request, pk: str | None = None) -> Response:
         obj = self.get_object()
         serializer = _UnshareRequestSerializer(data=request.data)
@@ -109,7 +153,7 @@ class OwnedViewSetMixin:
         unshare_object(obj, actor=request.user, users=list(serializer.validated_data["users"]))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["post"], permission_classes=[*_DEFAULT_PERMISSIONS, CanCopy])
+    @action(detail=True, methods=["post"])
     def copy(self, request: Request, pk: str | None = None) -> Response:
         obj = self.get_object()
         try:
@@ -119,7 +163,7 @@ class OwnedViewSetMixin:
         serializer = self.get_serializer(new_obj)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["get"], permission_classes=[*_DEFAULT_PERMISSIONS, IsOwner])
+    @action(detail=True, methods=["get"])
     def shares(self, request: Request, pk: str | None = None) -> Response:
         obj = self.get_object()
         sharees = _ShareeSerializer(obj.shared_with.all(), many=True).data

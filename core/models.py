@@ -70,6 +70,26 @@ class OwnedModel(models.Model):
 
     objects = OwnedManager()
 
+    #: Explicit override for ``core/tests/test_conventions.py``'s hooks guard
+    #: (``test_all_owned_models_declare_hooks``), for the one shape its relation-walk cannot
+    #: resolve on its own: a leaf reached through the *other* FK of a two-parent join model that
+    #: also joins a real container to its children (e.g. task 05's ``RecipeComponent.recipe``
+    #: pointing at ``Recipe`` and ``RecipeComponent.ingredient`` pointing at ``Ingredient`` —
+    #: both FKs are forward relations on the same join model, so a walk that finds one has no way
+    #: to tell it apart from the other). Leave this ``None`` (the default) for every other model;
+    #: the guard's ordinary relation-walk handles a plain forward FK/M2M and a reverse relation
+    #: into a join model correctly on its own.
+    #:
+    #: Set it explicitly only when the guard flags a model you have confirmed is a genuine leaf
+    #: reached this way — ``False`` exempts it regardless of what the heuristic sees. This must
+    #: be a deliberate, reviewable declaration, never a shortcut around a hooks failure you
+    #: haven't actually investigated: a no-op ``share_dependencies()``/``copy_children()``
+    #: override "fixes" the guard identically but reads as "I implemented this" rather than
+    #: "I decided this model has no owned children," which is exactly the ambiguity this
+    #: attribute exists to remove. See ``core/README.md``, "Does this model contain other owned
+    #: objects?".
+    contains_owned_children: bool | None = None
+
     class Meta:
         abstract = True
         constraints = [

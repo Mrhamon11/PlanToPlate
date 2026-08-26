@@ -52,7 +52,7 @@ against a stand-in keeps this task independent of task 04.
   *Files:* `core/viewsets.py`, `core/filters.py`
   *Done when:* the dummy model's endpoints pass the full IDOR matrix.
 
-- [ ] **03.8a — Carried over from the 03.5–03.8 review (address before closing task 03)**
+- [x] **03.8a — Carried over from the 03.5–03.8 review (address before closing task 03)**
   Four non-blocking findings from the 03.5–03.8 reviewer pass, folded into this window rather
   than deferred, per the project owner's explicit call on 2026-08-25:
   - **NB3** — Add `core/tests/test_conventions.py` for real (see `test-plan.md`'s "Regression
@@ -80,22 +80,22 @@ against a stand-in keeps this task independent of task 04.
   `core/tests/test_idor.py`.
   *Done when:* all four are addressed and the full suite is still green.
 
-- [ ] **03.9 — View mixins for HTML views**
+- [x] **03.9 — View mixins for HTML views**
   Fill in `OwnedObjectMixin` (stubbed in task 02) so template views get the same queryset
   filtering as the API. **The HTML views must not have a second, weaker path to the data.**
   *Files:* `core/mixins.py`
 
-- [ ] **03.10 — Share modal and ownership badges**
+- [x] **03.10 — Share modal and ownership badges**
   `_share_modal.html`, `_ownership_badge.html`, `_copy_button.html`, and the CSS for them.
   *Files:* `templates/_partials/*.html`, `static/css/components.css`
 
-- [ ] **03.11 — Documentation for future tasks**
+- [x] **03.11 — Documentation for future tasks**
   A short `core/README.md`: how to make a new model owned, and the checklist of things that
   must be wired (manager, serializer base, viewset mixin, `share_dependencies`,
   `copy_children`).
   *Files:* `core/README.md`
   *Done when:* tasks 04–08 can follow it without rereading this design.
 
-- [ ] **03.12 — Update the living document**
+- [x] **03.12 — Update the living document**
   Task 03 → AWAITING APPROVAL. Record any refinement to the sharing rules.
   *Files:* `Plan/MILESTONES.md`

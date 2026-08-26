@@ -1,0 +1,90 @@
+{% comment %}
+Reusable share modal (design.md, "UI": "A reusable share modal ... visibility radio, user
+multi-select, current-shares list with revoke buttons"). Same modal shell as
+_confirm_delete.html: loaded via hx-get into a modal target for JS users, or rendered as the
+content of a full page for a no-JS fallback.
+
+Usage: include this partial "with object=... share_url=... unshare_url=... shareable_users=...
+cancel_url=...". `object` must be owned by the current user — the /share/ and /unshare/ REST
+actions this posts to are IsOwner-only (core/permissions.py) and would 403 for anyone else, and
+the /shares/ action returning the same audience list this modal displays is IsOwner-only too
+(design.md: "the audience list is itself sensitive").
+
+That second point is why the ownership check below is not merely a caller contract: the whole
+modal body is gated on `user.is_authenticated and object.owner_id == user.id` so that if a
+caller ever includes this partial unconditionally (or a future screen forgets
+_ownership_badge.html's "only offer this for Mine" rule), a non-owner gets an empty render
+instead of the full sharee list — the same disclosure the API's own IsOwner gate on /shares/
+exists to prevent. `object.shared_with.all` below is therefore only ever reached once that
+check has already passed.
+{% endcomment %}
+{% if user.is_authenticated and object.owner_id == user.id %}
+<div class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
+        <h2 id="share-modal-title">Share &ldquo;{{ object }}&rdquo;</h2>
+
+        <form method="post" action="{{ share_url }}" class="share-form">
+            {% csrf_token %}
+            <fieldset class="field">
+                <legend>Visibility</legend>
+                <label>
+                    <input type="radio" name="visibility" value="PRIVATE"
+                           {% if object.visibility == "PRIVATE" %}checked{% endif %}>
+                    Private
+                </label>
+                <label>
+                    <input type="radio" name="visibility" value="SHARED"
+                           {% if object.visibility == "SHARED" %}checked{% endif %}>
+                    Shared with specific people
+                </label>
+                <label>
+                    <input type="radio" name="visibility" value="PUBLIC"
+                           {% if object.visibility == "PUBLIC" %}checked{% endif %}>
+                    Everyone with an account
+                </label>
+            </fieldset>
+
+            <div class="field">
+                <label for="share-modal-users">Add people</label>
+                <select id="share-modal-users" name="users" multiple size="5">
+                    {% for candidate in shareable_users %}
+                        <option value="{{ candidate.pk }}">{{ candidate.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Close</a>
+                <button type="submit" class="btn btn-primary" hx-disabled-elt="this">Share</button>
+            </div>
+        </form>
+
+        <div class="share-current">
+            <h3>Currently shared with</h3>
+            {% with current_shares=object.shared_with.all %}
+                {% if current_shares %}
+                    <ul class="share-list">
+                        {% for holder in current_shares %}
+                            <li class="share-list-item">
+                                <span>{{ holder.username }}</span>
+                                <form method="post" action="{{ unshare_url }}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="users" value="{{ holder.pk }}">
+                                    <button
+                                        type="submit"
+                                        class="btn btn-icon btn-danger"
+                                        aria-label="Revoke access for {{ holder.username }}"
+                                        hx-disabled-elt="this"
+                                    >&times;</button>
+                                </form>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted">Not shared with anyone yet.</p>
+                {% endif %}
+            {% endwith %}
+        </div>
+    </div>
+</div>
+{% endif %}
