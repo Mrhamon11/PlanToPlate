@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from core.models import Visibility
-from core.tests.models import DummyNode, DummyOwned
+from core.tests.models import DummyDivergentNode, DummyNode, DummyOwned
 
 
 @pytest.fixture
@@ -53,5 +53,20 @@ def make_dummy_node(db):
         defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
         defaults.update(kwargs)
         return DummyNode.objects.create(**defaults)
+
+    return _make
+
+
+@pytest.fixture
+def make_dummy_divergent_node(db):
+    """Factory fixture: build a persisted ``DummyDivergentNode``, whose ``share_edges`` and
+    ``copy_edges`` are independent relations — for tests proving the copy service's guard
+    applies to the graph it actually copies, not the sharing graph.
+    """
+
+    def _make(**kwargs) -> DummyDivergentNode:
+        defaults = {"visibility": Visibility.PRIVATE, "is_system": False}
+        defaults.update(kwargs)
+        return DummyDivergentNode.objects.create(**defaults)
 
     return _make

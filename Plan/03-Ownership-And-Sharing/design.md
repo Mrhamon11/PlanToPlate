@@ -233,6 +233,11 @@ Query filters available on every owned list endpoint: `?mine=true`, `?shared_wit
 - Sharing an already-`PUBLIC` object: allowed, no-op on visibility, still records the grants so
   that dropping back to `SHARED` preserves them.
 - `PUBLIC` → `PRIVATE`: existing `shared_with` grants survive. Only the public flag drops.
+- Widening a container to `PUBLIC` also publishes every dependency the actor owns, mirroring
+  the per-user cascade — there is no other way to grant "everyone" read access to a child given
+  this project's per-model M2M design. Like an explicit per-user share, this is **not reversed**
+  when the container is later dropped back to `PRIVATE` or `SHARED`: see "Unsharing does not
+  cascade" above, under "Sharing service."
 - Deleting a shared object: it disappears for recipients. Their copies are unaffected.
 - A user is deleted while holding shares: the M2M rows go with them.
 - Copying an object that contains a sub-object you can see but whose *own* children you cannot:

@@ -8,11 +8,16 @@ subclasses so this task's own suite can exercise the machinery before any of tho
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
 
 from core.managers import OwnedManager
+
+if TYPE_CHECKING:
+    from core.services.copying import Copier
 
 
 class Visibility(models.TextChoices):
@@ -84,8 +89,13 @@ class OwnedModel(models.Model):
         """
         return []
 
-    def copy_children(self, new_obj: OwnedModel) -> None:
+    def copy_children(self, new_obj: OwnedModel, *, copier: Copier) -> None:
         """Deep-copy this object's children onto ``new_obj`` (core/services/copying.py, 03.6).
+
+        Call ``copier.copy(dependency)`` for each child — never ``copy_object`` directly. The
+        ``Copier`` is what gives the whole operation its cycle guard, depth cap, and
+        memoization: a child reachable through two different paths (a diamond in the graph) is
+        copied exactly once and re-attached in both places, rather than copied once per path.
         The default does nothing — most owned models are leaves.
         """
         return None
