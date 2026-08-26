@@ -4,27 +4,29 @@
 
 Follow `core/README.md` from task 03 when wiring `Ingredient` as an owned model.
 
-- [ ] **04.1 — `Unit` model and `Dimension`**
+- [x] **04.1 — `Unit` model and `Dimension`**
   Model, migration, admin registration.
   *Files:* `catalog/models.py`, `catalog/admin.py`
   *Done when:* migrations apply and units are visible in the admin.
 
-- [ ] **04.2 — `Tag` model**
+- [x] **04.2 — `Tag` model**
   With `kind` and an auto-slug.
   *Files:* `catalog/models.py`
 
-- [ ] **04.3 — Unit conversion service**
+- [x] **04.3 — Unit conversion service**
   `convert`, `to_base`, `humanize`, plus the `IncompatibleUnits` exception.
   *Files:* `catalog/services/units.py`, `catalog/exceptions.py`
   *Done when:* the full conversion test matrix passes, including every refusal case.
 
-- [ ] **04.4 — `Ingredient` model**
+- [x] **04.4 — `Ingredient` model**
   `OwnedModel` subclass with the fields, validators, and case-insensitive unique constraints.
-  Implement the `share_dependencies()` and `copy_children()` hooks (both trivial — an
-  ingredient has no owned children — but required by the task 03 convention test).
+  An ingredient has no owned children: per `core/README.md` and MILESTONES.md decision D33 it
+  declares `contains_owned_children = False` (the greppable leaf opt-out) rather than a no-op
+  `share_dependencies()`/`copy_children()` override — the task 03 convention test is satisfied
+  either way, and the opt-out is what keeps it satisfied once task 05's `RecipeComponent` lands.
   *Files:* `catalog/models.py`
 
-- [ ] **04.5 — Seed fixtures and command**
+- [x] **04.5 — Seed fixtures and command**
   ~30 units, ~35 tags, ~150 ingredients as `is_system=True`. `manage.py seed_catalog`,
   idempotent, never touching user-owned rows.
   *Files:* `catalog/fixtures/*.json`, `catalog/management/commands/seed_catalog.py`
