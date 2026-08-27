@@ -108,6 +108,72 @@ def test_seeded_base_units_have_factor_one():
         assert Unit.objects.get(name=name).to_base_factor == Decimal("1")
 
 
+def test_seeded_system_ingredients_are_not_visibility_public():
+    """04.1-04.5 review, finding #11: system ingredients are readable via ``is_system=True``
+    in ``visible_to``, not via their ``visibility`` field — seeding them PUBLIC made
+    ``core/filters.py``'s ``?public=true`` return all ~176 built-ins alongside genuinely
+    user-published rows. They are seeded PRIVATE.
+    """
+    _seed()
+
+    assert (
+        not Ingredient.objects.filter(is_system=True)
+        .exclude(visibility=Visibility.PRIVATE)
+        .exists()
+    )
+
+
+def test_public_filter_excludes_system_ingredients(user_factory):
+    from rest_framework.test import APIClient
+
+    _seed()
+    api = APIClient()
+    api.force_login(user_factory(username="carol"))
+
+    response = api.get("/api/ingredients/?public=true")
+
+    assert response.status_code == 200
+    assert response.data["results"] == []
+
+
+def test_seed_warns_on_ambiguous_unit_lookup_key(monkeypatch):
+    """04.1-04.5 review, finding #7: if a fixture ever names a unit whose ``name`` collides
+    with another unit's ``abbrev`` (or vice versa), the seed keeps the first binding and warns
+    rather than silently letting the later row shadow the earlier in the lookup dict.
+    """
+    from catalog.management.commands.seed_catalog import Command
+
+    real_load = Command._load
+
+    def fake_load(self, name):
+        if name == "units":
+            return [
+                {
+                    "name": "widget",
+                    "abbrev": "wgt",
+                    "dimension": "COUNT",
+                    "to_base_factor": "1",
+                    "count_family": "widget",
+                },
+                {
+                    "name": "wgt",
+                    "abbrev": "wg2",
+                    "dimension": "COUNT",
+                    "to_base_factor": "1",
+                    "count_family": "wgt",
+                },
+            ]
+        if name in {"tags", "ingredients"}:
+            return []
+        return real_load(self, name)
+
+    monkeypatch.setattr(Command, "_load", fake_load)
+    stderr = io.StringIO()
+    call_command("seed_catalog", stdout=io.StringIO(), stderr=stderr)
+
+    assert "Ambiguous unit lookup key 'wgt'" in stderr.getvalue()
+
+
 def test_malformed_ingredient_rows_are_skipped_not_fatal(monkeypatch):
     """A future fixture edit that names a nonexistent unit, or repeats a name, must not abort
     the whole seed mid-transaction — the row is skipped with a warning and the rest land.

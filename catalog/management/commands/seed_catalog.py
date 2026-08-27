@@ -49,6 +49,17 @@ class Command(BaseCommand):
 
     def _seed_units(self) -> dict[str, Unit]:
         lookup: dict[str, Unit] = {}
+
+        def register(key: str, unit: Unit) -> None:
+            existing = lookup.get(key)
+            if existing is not None and existing.pk != unit.pk:
+                self.stderr.write(
+                    f"Ambiguous unit lookup key {key!r}: {existing.name!r} and {unit.name!r} "
+                    f"both claim it — keeping {existing.name!r}, ignoring the collision."
+                )
+                return
+            lookup[key] = unit
+
         for row in self._load("units"):
             unit, _ = Unit.objects.update_or_create(
                 name=row["name"],
@@ -61,8 +72,8 @@ class Command(BaseCommand):
                     "is_system": True,
                 },
             )
-            lookup[unit.name.lower()] = unit
-            lookup[unit.abbrev.lower()] = unit
+            register(unit.name.lower(), unit)
+            register(unit.abbrev.lower(), unit)
         return lookup
 
     def _seed_tags(self) -> dict[str, Tag]:
@@ -97,7 +108,12 @@ class Command(BaseCommand):
                 "default_unit": unit,
                 "density_g_per_ml": Decimal(str(density)) if density is not None else None,
                 "is_staple": bool(row.get("staple", False)),
-                "visibility": Visibility.PUBLIC,
+                # PRIVATE, not PUBLIC: a system row's readability comes from is_system=True in
+                # visible_to(), never from its visibility field, and seeding it PUBLIC would make
+                # core/filters.py's ?public=true return all ~176 built-ins alongside genuinely
+                # user-published rows (04.1-04.5 review, finding #11). Set explicitly rather than
+                # left to omission so a re-seed normalises any row an earlier build seeded PUBLIC.
+                "visibility": Visibility.PRIVATE,
             }
 
             # Match on is_system=True only: a user's own ingredient sharing this name is not

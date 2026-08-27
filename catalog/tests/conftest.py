@@ -145,10 +145,10 @@ def make_ingredient(db, gram):
             "is_system": owner is None,
             "owner": owner,
         }
-        if owner is not None:
-            defaults["visibility"] = Visibility.PRIVATE
-        else:
-            defaults["visibility"] = Visibility.PUBLIC
+        # System rows are seeded PRIVATE (04.1-04.5 review, finding #11): their readability
+        # comes from is_system=True in visible_to(), not the visibility field. Match that here
+        # so fixture-built system rows behave like real seeded ones.
+        defaults["visibility"] = Visibility.PRIVATE
         defaults.update(kwargs)
         ingredient = Ingredient(**defaults)
         ingredient.save()

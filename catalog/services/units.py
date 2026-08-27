@@ -59,6 +59,15 @@ _FRACTION_SNAP = Decimal("0.001")
 def _as_decimal(value: Decimal | int | str) -> Decimal:
     if isinstance(value, Decimal):
         return value
+    if isinstance(value, float):
+        # Refused at the boundary, not silently coerced: ``Decimal(str(0.1 + 0.2))`` already
+        # carries the binary-float rounding error the "Decimal end to end" DoD exists to keep
+        # out of a shopping list. A caller with a float has one on their side of the seam
+        # (``Decimal(str(x))`` at the call site, or better, never float in the first place).
+        raise TypeError(
+            f"Quantity must be a Decimal, int, or str — got float {value!r}. "
+            "Binary float rounding corrupts kitchen quantities; convert before calling."
+        )
     return Decimal(str(value))
 
 

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Ingredients — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Ingredients</h1>
+    <a class="btn btn-primary" href="{% url 'catalog:ingredient-create' %}">New ingredient</a>
+</div>
+
+{% comment %}
+One GET form drives search, tag chips, and the staple toggle. htmx swaps only the results
+region; without JavaScript the same form submits a normal GET and the whole page re-renders.
+{% endcomment %}
+<form class="ingredient-filters"
+      method="get"
+      action="{% url 'catalog:ingredient-list' %}"
+      hx-get="{% url 'catalog:ingredient-list' %}"
+      hx-target="#ingredient-results"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      hx-trigger="submit, change, keyup changed delay:300ms from:input[name='search']">
+    <div class="field">
+        <label for="ingredient-search">Search</label>
+        <input type="search" id="ingredient-search" name="search"
+               value="{{ search }}" placeholder="Search ingredients" autocomplete="off">
+    </div>
+
+    <label class="checkbox-inline">
+        <input type="checkbox" name="staple" value="1" {% if staple_only %}checked{% endif %}>
+        Staples only
+    </label>
+
+    {% if all_tags %}
+        <fieldset class="tag-chips">
+            <legend>Filter by tag</legend>
+            {% for tag in all_tags %}
+                <label class="chip">
+                    <input type="checkbox" name="tags" value="{{ tag.slug }}"
+                           {% if tag.slug in selected_tags %}checked{% endif %}>
+                    <span>{{ tag.name }}</span>
+                </label>
+            {% endfor %}
+        </fieldset>
+    {% endif %}
+
+    <noscript><button type="submit" class="btn">Apply</button></noscript>
+</form>
+
+<div id="ingredient-results">
+    {% include "catalog/_partials/_ingredient_results.html" %}
+</div>
+{% endblock %}

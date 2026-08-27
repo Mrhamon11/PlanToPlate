@@ -1,0 +1,46 @@
+{% comment %}
+The swappable results region for the ingredient list (Plan/04-Units-And-Ingredients, 04.9).
+Rendered inside #ingredient-results on a full page load, and returned on its own for an htmx
+filter request (core.mixins.HtmxTemplateMixin). A fragment — never extends base.html.
+{% endcomment %}
+{% if ingredients %}
+    <ul class="ingredient-list" role="list">
+        {% for ingredient in ingredients %}
+            <li class="ingredient-card">
+                <a class="ingredient-card-main" href="{% url 'catalog:ingredient-detail' ingredient.pk %}">
+                    <span class="ingredient-name">{{ ingredient.name }}</span>
+                    <span class="text-muted">{{ ingredient.default_unit.name }}</span>
+                </a>
+                <div class="ingredient-card-meta">
+                    {% include "_partials/_ownership_badge.html" with object=ingredient %}
+                    {% if ingredient.is_staple %}<span class="badge">Staple</span>{% endif %}
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+
+    {% if page_obj.has_other_pages %}
+        <nav class="pagination" aria-label="Pagination">
+            <ul role="list">
+                {% if page_obj.has_previous %}
+                    <li>
+                        <a href="?{{ querystring }}&page={{ page_obj.previous_page_number }}"
+                           hx-get="?{{ querystring }}&page={{ page_obj.previous_page_number }}"
+                           hx-target="#ingredient-results" hx-swap="innerHTML" hx-push-url="true">Previous</a>
+                    </li>
+                {% endif %}
+                <li aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</li>
+                {% if page_obj.has_next %}
+                    <li>
+                        <a href="?{{ querystring }}&page={{ page_obj.next_page_number }}"
+                           hx-get="?{{ querystring }}&page={{ page_obj.next_page_number }}"
+                           hx-target="#ingredient-results" hx-swap="innerHTML" hx-push-url="true">Next</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
+{% else %}
+    {% url 'catalog:ingredient-create' as create_url %}
+    {% include "_partials/_empty_state.html" with title="No ingredients found" message="Try a different search, clear the tag filters, or add a new ingredient." action_url=create_url action_label="New ingredient" %}
+{% endif %}

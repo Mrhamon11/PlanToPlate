@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ingredient.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+<article class="ingredient-detail">
+    <div class="page-header">
+        <h1>{{ ingredient.name }}</h1>
+        {% include "_partials/_ownership_badge.html" with object=ingredient %}
+    </div>
+
+    {% include "_partials/_copied_from.html" with object=ingredient %}
+
+    <dl class="detail-grid">
+        <dt>Default unit</dt>
+        <dd>{{ ingredient.default_unit.name }} ({{ ingredient.default_unit.abbrev }})</dd>
+
+        <dt>Density</dt>
+        <dd>
+            {% if ingredient.density_g_per_ml %}
+                {{ ingredient.density_g_per_ml }} g/ml
+            {% else %}
+                <span class="text-muted">Not set — mass/volume conversion is refused for this ingredient.</span>
+            {% endif %}
+        </dd>
+
+        <dt>Pantry staple</dt>
+        <dd>{{ ingredient.is_staple|yesno:"Yes — kept out of generated shopping lists,No" }}</dd>
+
+        <dt>Tags</dt>
+        <dd>
+            {% for tag in ingredient.tags.all %}
+                <span class="badge">{{ tag.name }}</span>
+            {% empty %}
+                <span class="text-muted">None</span>
+            {% endfor %}
+        </dd>
+
+        {% if ingredient.notes %}
+            <dt>Notes</dt>
+            <dd>{{ ingredient.notes|linebreaksbr }}</dd>
+        {% endif %}
+    </dl>
+
+    <div class="detail-actions">
+        {% if is_owner %}
+            <a class="btn" href="{% url 'catalog:ingredient-update' ingredient.pk %}">Edit</a>
+            <a class="btn"
+               href="{% url 'catalog:ingredient-share-modal' ingredient.pk %}"
+               hx-get="{% url 'catalog:ingredient-share-modal' ingredient.pk %}"
+               hx-target="#modal"
+               hx-swap="innerHTML">Share</a>
+            <a class="btn btn-danger" href="{% url 'catalog:ingredient-delete' ingredient.pk %}">Delete</a>
+        {% else %}
+            {% url 'catalog:ingredient-copy' ingredient.pk as copy_url %}
+            {% include "_partials/_copy_button.html" with object=ingredient copy_url=copy_url %}
+        {% endif %}
+    </div>
+
+    <p><a href="{% url 'catalog:ingredient-list' %}">&larr; All ingredients</a></p>
+</article>
+
+<div id="modal"></div>
+{% endblock %}

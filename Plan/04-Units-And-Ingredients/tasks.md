@@ -32,37 +32,50 @@ Follow `core/README.md` from task 03 when wiring `Ingredient` as an owned model.
   *Files:* `catalog/fixtures/*.json`, `catalog/management/commands/seed_catalog.py`
   *Done when:* running it twice leaves the row count unchanged.
 
-- [ ] **04.6 — Serializers**
+- [x] **04.6 — Serializers**
   `UnitSerializer`, `TagSerializer`, `IngredientSerializer` (on `OwnedSerializer`),
-  `ConversionRequestSerializer`.
+  `ConversionRequestSerializer` (bounded `DecimalField` → 400 not 500 for oversized quantity,
+  carried finding #4; `ingredient` field scoped to `visible_to`).
   *Files:* `catalog/serializers.py`
 
-- [ ] **04.7 — API viewsets**
-  Read-only units and tags (staff writes), full ingredient viewset via `OwnedViewSetMixin`,
-  the conversion endpoint, filters and search.
-  *Files:* `catalog/api.py`, `catalog/filters.py`, `catalog/urls.py`
-  *Done when:* every route appears in `/api/docs/` and the IDOR matrix passes.
+- [x] **04.7 — API viewsets**
+  Read-only units and tags (staff writes via `StaffWriteReadOnly`), full ingredient viewset via
+  `OwnedViewSetMixin`, `POST /api/units/convert/` as a `detail=False` action, `IngredientFilter`
+  (`search`/`tags`/`is_staple`, composed on top of `visible_to`; `?mine=` from
+  `core/filters.py`). `catalog/api.py`, `catalog/filters.py`, `catalog/api_urls.py` (+ HTML
+  `catalog/urls.py`), wired into `config/urls.py`.
+  *Done when:* every route appears in `/api/docs/` and the IDOR matrix passes. ✓
 
-- [ ] **04.8 — Protected-delete handling**
-  Translate `ProtectedError` into a 409 naming the recipes that block the delete.
-  *Files:* `catalog/api.py`, `core/exceptions.py`
+- [x] **04.8 — Protected-delete handling**
+  `core/exceptions.py`: `Conflict` + `conflict_from_protected_error`. `IngredientViewSet
+  .perform_destroy` and `IngredientDeleteView.form_valid` translate `ProtectedError` → 409 /
+  flash. **Real end-to-end `test_delete_in_use_returns_409` deferred to task 05** (nothing
+  PROTECTs `Ingredient` until `RecipeComponent`); covered here by a synthetic `ProtectedError`
+  unit test + a monkeypatched viewset test.
 
-- [ ] **04.9 — Ingredient list UI**
-  Debounced search, tag chips, staple filter, ownership badges, pagination, empty state.
-  *Files:* `catalog/views.py`, `templates/catalog/ingredient_list.html`, `_partials/`
+- [x] **04.9 — Ingredient list UI**
+  `IngredientListView` (debounced htmx search `keyup changed delay:300ms`, tag chips, staple
+  toggle, pagination preserving the query string, empty state, ownership badges). Filters
+  narrow `super().get_queryset()` (= `visible_to`), never replace it.
+  *Files:* `catalog/views.py`, `templates/catalog/ingredient_list.html`, `_partials/_ingredient_results.html`
 
-- [ ] **04.10 — Ingredient detail and form**
-  Create/edit/delete with the share modal and copy button from task 03.
-  *Files:* `templates/catalog/ingredient_form.html`, `ingredient_detail.html`
+- [x] **04.10 — Ingredient detail and form**
+  Detail + create/edit/delete. Share wired via an HTML intermediary (`IngredientShareModalView`
+  renders task 03's `_share_modal.html`; `IngredientShareView`/`IngredientUnshareView` call
+  `core.services.sharing`), copy via `IngredientCopyView` → `copy_object`, `_copied_from.html`
+  on the detail page.
+  *Files:* `templates/catalog/ingredient_form.html`, `ingredient_detail.html`, `ingredient_confirm_delete.html`, `ingredient_share.html`
 
-- [ ] **04.11 — Shared unit picker partial**
-  `_unit_select.html`, grouped by dimension, for reuse across the app.
-  *Files:* `templates/_partials/_unit_select.html`
+- [x] **04.11 — Shared unit picker partial**
+  `templates/_partials/_unit_select.html`, `{% regroup %}` by dimension, optional/required
+  blank-option handling. Consumed by `ingredient_form.html`.
 
-- [ ] **04.12 — Quick-add ingredient endpoint**
-  Minimal-payload create returning a row fragment, for the task 05 recipe editor.
+- [x] **04.12 — Quick-add ingredient endpoint**
+  `IngredientQuickAddView` (POST, minimal payload, idempotent on name) → `_ingredient_row.html`
+  fragment carrying the task-05 data-attribute contract.
   *Files:* `catalog/views.py`, `templates/catalog/_partials/_ingredient_row.html`
 
-- [ ] **04.13 — Update the living document**
-  Task 04 → AWAITING APPROVAL.
+- [x] **04.13 — Update the living document**
+  MILESTONES.md task 04 note updated to name 04.12 as last completed subtask (status left
+  IN PROGRESS — the orchestrator flips it after human approval).
   *Files:* `Plan/MILESTONES.md`

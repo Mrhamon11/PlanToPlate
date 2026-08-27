@@ -7,6 +7,7 @@ without inventing a density.
 
 from __future__ import annotations
 
+import io
 from decimal import Decimal
 
 import pytest
@@ -95,6 +96,9 @@ def test_convert_within_generic_count_family(each, dozen, half_dozen):
     assert convert(Decimal("1"), dozen, each) == Decimal("12")
     assert convert(Decimal("1"), dozen, half_dozen) == Decimal("2")
     assert convert(Decimal("3"), half_dozen, each) == Decimal("18")
+    # The sub-1 direction too (04.1-04.5 review, finding #22): 6 each is exactly half a dozen.
+    assert convert(Decimal("6"), each, dozen) == Decimal("0.5")
+    assert convert(Decimal("3"), each, half_dozen) == Decimal("0.5")
 
 
 def test_convert_between_unrelated_count_units_raises(clove, can):
@@ -117,8 +121,52 @@ def test_convert_piece_unit_to_generic_count_raises(slice_, dozen):
     assert "no fixed ratio" in str(exc.value)
 
 
-def test_convert_piece_unit_to_itself_is_identity(clove):
+def test_same_unit_short_circuits_before_count_family_logic(clove):
+    """A singleton counted unit converting *to itself* is the identity short-circuit
+    (``_same_unit``), which runs before ``_same_count_family`` is ever consulted — so a
+    piece unit still round-trips to itself even though it converts to nothing else
+    (04.1-04.5 review, finding #21: renamed from ``..._to_itself_is_identity`` to say which
+    branch it actually exercises).
+    """
     assert convert(Decimal("5"), clove, clove) == Decimal("5")
+
+
+def test_convert_rejects_float_quantity(gram, kilogram):
+    """04.1-04.5 review, finding #13: a runtime ``float`` is refused at the service boundary,
+    not silently coerced — ``Decimal(str(0.1 + 0.2))`` already carries the rounding error the
+    "Decimal end to end" DoD exists to keep out.
+    """
+    with pytest.raises(TypeError):
+        convert(0.5, kilogram, gram)  # noqa: no float in production; deliberate here
+    with pytest.raises(TypeError):
+        to_base(0.5, gram)
+
+
+def test_seeded_units_respect_d34_count_family_contract():
+    """04.1-04.5 review, finding #16: the D34 contract holds over the *seeded* Unit rows, not
+    only the hand-built conftest fixtures — ``each``/``dozen``/``half dozen`` interconvert,
+    a packaging unit converts only to itself, and ``clove`` -> ``can`` refuses.
+    """
+    from django.core.management import call_command
+
+    from catalog.models import GENERIC_COUNT_FAMILY, Unit
+
+    call_command("seed_catalog", stdout=io.StringIO(), stderr=io.StringIO())
+
+    each = Unit.objects.get(name="each")
+    dozen = Unit.objects.get(name="dozen")
+    half_dozen = Unit.objects.get(name="half dozen")
+    clove = Unit.objects.get(name="clove")
+    can = Unit.objects.get(name="can")
+
+    families = {each.count_family, dozen.count_family, half_dozen.count_family}
+    assert families == {GENERIC_COUNT_FAMILY}
+    assert convert(Decimal("1"), dozen, each) == Decimal("12")
+    assert convert(Decimal("2"), half_dozen, each) == Decimal("12")
+
+    assert convert(Decimal("3"), clove, clove) == Decimal("3")
+    with pytest.raises(IncompatibleUnits):
+        convert(Decimal("2"), clove, can)
 
 
 def test_convert_uses_decimal_not_float(liter, milliliter, gram, kilogram):

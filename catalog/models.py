@@ -14,6 +14,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Lower
+from django.urls import reverse
 from django.utils.text import slugify
 
 from core.models import OwnedModel
@@ -28,6 +29,11 @@ class Dimension(models.TextChoices):
 #: The one COUNT family whose members carry a real numeric ratio to one another: ``each`` (1),
 #: ``half dozen`` (6), ``dozen`` (12). Every other counted unit (can, slice, clove, …) is a
 #: singleton — it converts only to itself, because "1 can" and "2 slices" have no fixed ratio.
+#:
+#: This is the canonical value ``catalog/fixtures/units.json`` writes for those three rows and
+#: the D34 conversion contract is defined against; ``Unit.is_generic_count`` and the seed tests
+#: read it back so a fixture drift ("generics" / "count") is caught rather than silently
+#: producing three mutually-inconvertible singletons.
 GENERIC_COUNT_FAMILY = "generic"
 
 
@@ -53,7 +59,11 @@ class Unit(models.Model):
 
     name = models.CharField(max_length=40, unique=True)
     plural = models.CharField(max_length=40, blank=True)
-    abbrev = models.CharField(max_length=12)
+    #: Unique: ``seed_catalog`` builds its fixture lookup keyed on ``abbrev`` as well as ``name``
+    #: (so ``{"unit": "ea"}`` in ``ingredients.json`` resolves), and the app-wide unit picker
+    #: shows the abbreviation as the human label — two units sharing one would make both
+    #: ambiguous. Units are admin-managed, so this is a guard rail, not a user-facing flow.
+    abbrev = models.CharField(max_length=12, unique=True)
     dimension = models.CharField(max_length=6, choices=Dimension.choices, db_index=True)
     to_base_factor = models.DecimalField(
         max_digits=20, decimal_places=10, validators=[validate_positive_factor]
@@ -78,6 +88,14 @@ class Unit(models.Model):
 
     def __str__(self) -> str:
         return self.abbrev
+
+    @property
+    def is_generic_count(self) -> bool:
+        """``each`` / ``dozen`` / ``half dozen`` — the one COUNT family whose members carry a
+        real ratio to one another (``GENERIC_COUNT_FAMILY``, D34). Every other counted unit is
+        its own singleton and returns ``False`` here, as does every MASS/VOLUME unit.
+        """
+        return self.count_family == GENERIC_COUNT_FAMILY
 
     def label_for(self, quantity: Decimal | int | None) -> str:
         """The singular or plural name to show next to ``quantity`` ("cup" vs "cups").
@@ -185,6 +203,9 @@ class Ingredient(OwnedModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def get_absolute_url(self) -> str:
+        return reverse("catalog:ingredient-detail", kwargs={"pk": self.pk})
 
     def clean(self) -> None:
         super().clean()
