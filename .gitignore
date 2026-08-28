@@ -83,6 +83,7 @@ logs/
 # ==========================================
 # 8. p2p pipeline working files
 # ==========================================
-# Per-run review findings. Transient: the pipeline deletes it at the start of
-# each task run. Anything durable belongs in Plan/MILESTONES.md's decision log.
+# Per-run tester/reviewer findings handed to p2p-dev for rework. Transient: p2p-dev
+# deletes it once consumed, and an approving tester/reviewer deletes it too, so it
+# never reaches a commit. Anything durable belongs in Plan/ARCHITECTURE.md's decision log.
 Plan/**/.review-findings.md

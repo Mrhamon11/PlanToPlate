@@ -15,7 +15,7 @@ reasoning — and the edge cases — actually live.
 
 **Every queryset that can return user data goes through `.visible_to(user)`. Every write path
 goes through `.editable_by(user)` or the `IsOwnerOrReadOnly` permission. Nobody ever hand-rolls
-an ownership filter.** `Plan/MILESTONES.md` section 6 calls this the single most
+an ownership filter.** `Plan/ARCHITECTURE.md` calls this the single most
 security-critical convention in the codebase, and it is enforced two ways:
 
 1. `core/apps.py` registers a `manage.py check` (`core.E001`/`core.E002`) that fails the build if

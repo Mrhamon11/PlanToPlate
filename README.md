@@ -1,8 +1,8 @@
 # PlanToPlate
 
 A self-hosted recipe, meal-planning and shopping-list app for a household of 10–20 users,
-built with Django and DRF. See [`Plan/MILESTONES.md`](Plan/MILESTONES.md) for the full
-architecture and decision log.
+built with Django and DRF. See [`Plan/ARCHITECTURE.md`](Plan/ARCHITECTURE.md) for the
+architecture and decision log, and [`Plan/MILESTONES.md`](Plan/MILESTONES.md) for task status.
 
 ## First deployment (Docker Compose)
 

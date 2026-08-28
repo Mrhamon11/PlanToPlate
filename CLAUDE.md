@@ -66,8 +66,9 @@ server are all fine without asking.
 
 All work is driven by the documents in `Plan/`.
 
-1. **Read `Plan/MILESTONES.md` at the start of every session.** It is the living document:
-   architecture, conventions, decision log, and the status of every task.
+1. **At the start of every session read `Plan/MILESTONES.md`** (task status and what each
+   completed task introduced) **and `Plan/ARCHITECTURE.md`** (the stack, layout, data model,
+   security posture, and the decision log — everything a future session must respect).
 2. Work is organised into task folders (`Plan/05-Recipes/` and so on). Each contains:
    - `design.md` — what to build and why.
    - `tasks.md` — the ordered subtask checklist.
@@ -76,8 +77,10 @@ All work is driven by the documents in `Plan/`.
 4. Implement subtasks in order. Tick them off in `tasks.md` as they land.
 5. A task is complete only when every item in its `test-plan.md` Definition of Done is
    satisfied and the full suite is green.
-6. **When a task completes, update `Plan/MILESTONES.md`** — the status table, and the
-   decision log if anything was decided along the way that future sessions need to know.
+6. **When a task completes:** add 2–3 plain lines to its row in `Plan/MILESTONES.md` (what was
+   introduced, plus any still-open constraint), and add any binding decision to
+   `Plan/ARCHITECTURE.md`'s decision log. Keep the MILESTONES row short — no test counts, no
+   iteration history.
 7. If the design turns out to be wrong, **stop and say so**. Do not silently deviate from the
    plan files; update them (with permission) so the next session inherits the truth.
 
