@@ -146,6 +146,10 @@ class RecipeSerializer(OwnedSerializer):
 `OwnedSerializer` already makes `owner`, `is_system`, `shared_with`, `copied_from`, and
 `visibility` read-only and injects `owner` from `request.user` on create — list them in
 `Meta.fields` if you want them in the response, but never re-declare them as writable.
+`shared_with` is a special case (`ARCHITECTURE.md` D35): it is a `SerializerMethodField` that
+returns the real audience **only to the object's owner** and `[]` to every other reader, so
+listing it in `Meta.fields` is safe — it never becomes a second, ungated path to the audience
+the owner-only `/shares/` action protects.
 `visibility` is deliberately read-only even here: changing it goes through `/share/` (the
 sharing service), which runs the cascade check a bare `PATCH` has no way to know about. Don't
 add a writable `visibility` field to a subclass to "fix" this — that reopens the exact hole

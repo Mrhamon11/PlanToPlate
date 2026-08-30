@@ -82,6 +82,21 @@ def test_visibility_is_read_only(alice, make_dummy):
     assert obj.visibility == Visibility.PRIVATE
 
 
+def test_shared_with_serialized_only_for_owner(alice, bob, carol, make_dummy):
+    """``ARCHITECTURE.md`` D35: the share audience is itself sensitive, so ``OwnedSerializer``
+    renders ``shared_with`` only for the owner and ``[]`` for everyone else — the same gate
+    the owner-only ``/shares/`` action applies.
+    """
+    obj = make_dummy(owner=alice, visibility=Visibility.SHARED)
+    obj.shared_with.add(bob, carol)
+
+    owner_view = DummySerializer(obj, context={"request": _request(alice)})
+    assert set(owner_view.data["shared_with"]) == {bob.pk, carol.pk}
+
+    holder_view = DummySerializer(obj, context={"request": _request(bob)})
+    assert holder_view.data["shared_with"] == []
+
+
 def test_nested_children_filtered_by_visibility(alice, carol, make_dummy_node):
     parent = make_dummy_node(owner=alice, name="parent", visibility=Visibility.PUBLIC)
     visible_child = make_dummy_node(owner=alice, name="visible", visibility=Visibility.PUBLIC)

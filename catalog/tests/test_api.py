@@ -80,6 +80,27 @@ def test_units_writable_by_staff(client_for):
     assert Unit.objects.get(name="stone").dimension == "MASS"
 
 
+def test_unit_is_system_is_read_only(client_for):
+    """``Unit`` is not owned and is always globally visible, so a "non-system" unit is
+    meaningless — ``is_system`` is exposed for display but never accepted on write.
+    """
+    client, _ = client_for(is_staff=True)
+
+    response = client.post(
+        "/api/units/",
+        {
+            "name": "furlong",
+            "abbrev": "fur",
+            "dimension": "MASS",
+            "to_base_factor": "201168",
+            "is_system": False,
+        },
+    )
+
+    assert response.status_code == 201
+    assert Unit.objects.get(name="furlong").is_system is True
+
+
 def test_tags_readonly_for_regular_user(client_for):
     client, _ = client_for()
 

@@ -105,6 +105,34 @@ def test_cannot_read_shares_audience_of_others_ingredient(alice, carol, make_ing
     assert response.status_code == 403
 
 
+def test_shared_with_field_is_owner_only_on_retrieve(alice, carol, user_factory, make_ingredient):
+    """The plain retrieve endpoint must not become a second, ungated path to the audience the
+    owner-only ``/shares/`` action protects (``ARCHITECTURE.md`` D35). A read-only holder — and
+    any viewer of a PUBLIC row — sees ``shared_with: []``; the owner sees the real list.
+    """
+    dan = user_factory(username="dan")
+    obj = make_ingredient(name="Alice Shared", owner=alice, visibility=Visibility.SHARED)
+    obj.shared_with.add(carol, dan)
+
+    holder = _client(carol).get(f"/api/ingredients/{obj.pk}/")
+    assert holder.status_code == 200
+    assert holder.data["shared_with"] == []
+
+    owner = _client(alice).get(f"/api/ingredients/{obj.pk}/")
+    assert owner.status_code == 200
+    assert set(owner.data["shared_with"]) == {carol.pk, dan.pk}
+
+
+def test_shared_with_field_empty_for_public_viewer(alice, carol, make_ingredient):
+    obj = make_ingredient(name="Alice Public", owner=alice, visibility=Visibility.PUBLIC)
+    obj.shared_with.add(carol)
+
+    response = _client(carol).get(f"/api/ingredients/{obj.pk}/")
+
+    assert response.status_code == 200
+    assert response.data["shared_with"] == []
+
+
 # --- search must compose with visible_to, never replace it -----------------------------
 
 

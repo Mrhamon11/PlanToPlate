@@ -303,6 +303,23 @@ def test_quick_add_requires_a_name(logged_in):
     assert "required" in response.content.decode().lower()
 
 
+def test_quick_add_non_numeric_unit_id_is_400_not_500(logged_in, make_unit):
+    """A malformed ``default_unit`` from the recipe editor (task 05) degrades to a 400 — the
+    ORM's "Field 'id' expected a number" ``ValueError`` must not reach the client as a 500.
+    """
+    client, me = logged_in
+    make_unit("each")
+
+    response = client.post(
+        reverse("catalog:ingredient-quick-add"),
+        {"name": "Sumac", "default_unit": "abc"},
+    )
+
+    assert response.status_code == 400
+    assert "<html" not in response.content.decode()
+    assert not Ingredient.objects.filter(owner=me, name="Sumac").exists()
+
+
 def test_quick_add_requires_login(client):
     response = client.post(reverse("catalog:ingredient-quick-add"), {"name": "Sumac"})
 

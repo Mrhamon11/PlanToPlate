@@ -84,9 +84,12 @@ class UnitViewSet(viewsets.ModelViewSet):
                     "reason": exc.reason,
                 }
             ) from exc
+        # str(), not the raw Decimal: DRF's JSONEncoder coerces a bare Decimal to a float
+        # (lossy past ~15 significant digits), while the rest of the API renders decimals as
+        # strings via COERCE_DECIMAL_TO_STRING. Keep this endpoint consistent and lossless.
         return Response(
             {
-                "quantity": result,
+                "quantity": str(result),
                 "from_unit": data["from_unit"].pk,
                 "to_unit": data["to_unit"].pk,
                 "unit": data["to_unit"].abbrev,
@@ -106,7 +109,7 @@ class IngredientViewSet(OwnedViewSetMixin, viewsets.ModelViewSet):
     queryset = (
         Ingredient.objects.all()
         .select_related("default_unit", "owner", "copied_from")
-        .prefetch_related("tags")
+        .prefetch_related("tags", "shared_with")
     )
     serializer_class = IngredientSerializer
     filterset_class = IngredientFilter

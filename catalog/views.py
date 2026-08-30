@@ -277,9 +277,18 @@ class IngredientQuickAddView(LoginRequiredMixin, View):
             )
 
         unit = None
-        unit_id = request.POST.get("default_unit")
-        if unit_id:
-            unit = Unit.objects.filter(pk=unit_id).first()
+        unit_id = (request.POST.get("default_unit") or "").strip()
+        if unit_id.isdigit():
+            unit = Unit.objects.filter(pk=int(unit_id)).first()
+        elif unit_id:
+            # A non-numeric unit id is a malformed request from the recipe editor (task 05),
+            # not a reason to 500 on the ORM's "Field 'id' expected a number" ValueError.
+            return render(
+                request,
+                "catalog/_partials/_ingredient_row.html",
+                {"error": "That unit is not valid."},
+                status=400,
+            )
         if unit is None:
             unit = Unit.objects.filter(name="each").first() or Unit.objects.order_by("pk").first()
         if unit is None:

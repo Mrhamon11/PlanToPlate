@@ -32,6 +32,9 @@ class UnitSerializer(serializers.ModelSerializer):
             "count_family",
             "is_system",
         ]
+        # ``Unit`` is not an ``OwnedModel`` — it is always globally visible — so a
+        # "non-system" unit is meaningless. Exposed for display, never accepted on write.
+        read_only_fields = ["is_system"]
 
 
 class TagSerializer(serializers.ModelSerializer):
