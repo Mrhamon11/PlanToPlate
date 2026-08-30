@@ -2,33 +2,33 @@
 
 > Design: [`design.md`](design.md) · Tests: [`test-plan.md`](test-plan.md) · Living doc: [`../MILESTONES.md`](../MILESTONES.md)
 
-- [ ] **05.1 — `Recipe` model**
+- [x] **05.1 — `Recipe` model**
   `OwnedModel` subclass with yield, times, role, tags. `share_dependencies()` returns
   sub-recipes and ingredients; `copy_children()` copies components.
   *Files:* `recipes/models.py`
   *Done when:* migrations apply and the task 03 convention tests pass.
 
-- [ ] **05.2 — `RecipeComponent` model**
+- [x] **05.2 — `RecipeComponent` model**
   With the ingredient-XOR-sub_recipe check constraint, `PROTECT` deletes, and ordering.
   *Files:* `recipes/models.py`
   *Done when:* the database rejects a component with both or neither set.
 
-- [ ] **05.3 — `RecipeStats` model and service**
+- [x] **05.3 — `RecipeStats` model and service**
   Lazy `get_or_create` accessor, `mark_made()`, `set_rating()`, `toggle_favorite()`.
   *Files:* `recipes/models.py`, `recipes/services/stats.py`
 
-- [ ] **05.4 — Cycle guard**
+- [x] **05.4 — Cycle guard**
   `assert_no_cycle`, `recipe_depth`, `MAX_DEPTH`, and a `CycleError` naming the chain.
   *Files:* `recipes/services/graph.py`
   *Done when:* self-reference, a two-hop cycle, and a five-hop cycle are all caught.
 
-- [ ] **05.5 — Scale and flatten service**
+- [x] **05.5 — Scale and flatten service**
   `scale`, `flatten`, `aggregate`, `FlatLine`, including sub-recipe yield scaling and
   irreconcilable-dimension splitting.
   *Files:* `recipes/services/flatten.py`
   *Done when:* a nested recipe flattens to correct quantities by hand-checked arithmetic.
 
-- [ ] **05.6 — Query optimisation for flatten**
+- [x] **05.6 — Query optimisation for flatten**
   `prefetch_related` the whole component graph.
   *Files:* `recipes/services/flatten.py`, `recipes/managers.py`
   *Done when:* the query-count test passes for a 3-level, 20-component recipe.
@@ -43,6 +43,10 @@
 - [ ] **05.8 — API viewset**
   CRUD plus `scaled`, `flattened`, `made`, `stats`, and all filters.
   *Files:* `recipes/api.py`, `recipes/filters.py`, `recipes/urls.py`
+  *Also:* harden `scale` / `flatten` in `recipes/services/flatten.py` to reject a `float`
+  `factor` (mirror `catalog.services.units._as_decimal`'s `TypeError`) before wiring the
+  `?factor=` query param into them — a float carries binary rounding error into `Decimal`.
+  (Task 05 review NB2.)
 
 - [ ] **05.9 — Protected-delete handling**
   409 naming parent recipes when deleting a sub-recipe in use.

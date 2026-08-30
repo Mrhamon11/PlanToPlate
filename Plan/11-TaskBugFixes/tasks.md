@@ -33,6 +33,13 @@ need a full design) only when a subtask is actually picked up.
   single batched query. Acceptable at this project's scale (`MAX_NODES` capped at 1000,
   10-20 users total) but would benefit from batching if either cap grows.
 
+- [ ] **11.5 — Unprefetched graph walk in recipe DAG traversal helpers**
+  *Found in:* task 05 review (NB4), `recipes/services/graph.py`.
+  *Issue:* `assert_no_cycle` / `recipe_depth` / `_find_chain` walk `.components` and
+  `.used_in` without prefetch — one query per node visited. Bounded and harmless at the
+  depth-5 / cycle-guard limits enforced today. Revisit if a bulk recipe import path lands
+  that runs these over many recipes at once; batch with `prefetch_related` then.
+
 - [ ] **11.3 — `OwnedSerializer`'s declared-field assertion trap for subclasses**
   *Found in:* task 03 review (NB7), `core/serializers.py`.
   *Issue:* `OwnedSerializer` declares `owner`, `is_system`, `shared_with`, `copied_from`, and
@@ -42,6 +49,30 @@ need a full design) only when a subtask is actually picked up.
   include all five) in `core/README.md` (03.11) when that file is written, and/or add a
   `django.core.checks` system check mirroring the existing owner-manager check in
   `core/apps.py`.
+
+- [ ] **11.6 — `mark_made` increment is a Python read-modify-write, not `F()`**
+  *Found in:* task 05 review (NB1), `recipes/services/stats.py`.
+  *Issue:* `stats.times_made += 1` reads the value into Python and writes it back, so two
+  concurrent `mark_made` calls for the same (user, recipe) can lose an increment. Masked today
+  because SQLite runs with `transaction_mode="IMMEDIATE"` and serialises writers, but it would
+  be a genuine lost update on Postgres (the documented portability target). Fix with
+  `RecipeStats.objects.filter(...).update(times_made=F("times_made") + 1, last_made_at=...)`
+  or an `F()` expression on the instance.
+
+- [ ] **11.7 — DAG traversal error messages are inconsistent (PKs vs names)**
+  *Found in:* task 05 review (NB3), `recipes/services/graph.py`.
+  *Issue:* `recipe_depth` / `_depth_above` raise `CycleError` with stringified PKs, while the
+  chains in `assert_no_cycle` and `_flatten_into` use recipe names. A pre-existing cyclic row
+  is unfixable by the user regardless, so this is cosmetic — align the message format when the
+  file is next touched.
+
+- [ ] **11.8 — `_has_component_graph` sentinel is too weak**
+  *Found in:* task 05 review (NB4, this round), `recipes/services/flatten.py`.
+  *Issue:* `_has_component_graph` only checks for the `"components"` prefetch cache key. A
+  caller doing a shallow `Recipe.objects.prefetch_related("components").get()` passes the check
+  and then hits silent per-sub-recipe N+1 during recursion. Only `flatten` consumes this and
+  only tasks 07/08 (not yet built) call it, so latent. Replace the docstring reliance with a
+  stronger sentinel or an assertion that the full `MAX_DEPTH + 1` prefetch chain is present.
 
 - [ ] **11.4 — No reusable mechanism for the relation-leakage security rule**
   *Found in:* task 03 review (NB8), `design.md`'s security note #4 ("leakage through
