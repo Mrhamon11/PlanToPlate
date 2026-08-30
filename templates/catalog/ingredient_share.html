@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block title %}Share {{ object.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+{% include "_partials/_share_modal.html" with object=object share_url=share_url unshare_url=unshare_url shareable_users=shareable_users cancel_url=cancel_url %}
+{% endblock %}

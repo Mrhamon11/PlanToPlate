@@ -16,7 +16,8 @@ free-form focus note.
 
 1. Resolve `$1` to a folder: `ls -d Plan/$1*`. If it does not resolve to exactly one folder,
    stop and ask.
-2. Read `Plan/MILESTONES.md` and all three files in the resolved task folder.
+2. Read `Plan/MILESTONES.md` (task status) and all three files in the resolved task folder.
+   You do not need `Plan/ARCHITECTURE.md` yourself — the subagents read it.
 3. Check the task's stated dependencies in `design.md`. If a prerequisite task is not marked
    complete in `MILESTONES.md`, **stop and tell the user** rather than building on sand.
 4. **Determine this run's scope** (see below) and state it explicitly before dispatching, so
@@ -108,25 +109,30 @@ Each run must leave the tree working, because the next session starts by assumin
 
 **Stage 1 — `p2p-dev`.** Dispatch the `p2p-dev` agent with: the resolved task folder path, the
 iteration number, and — on iterations 2 and 3 — an instruction to work `.review-findings.md`
-as its work list. Wait for it to finish.
+as its work list. Wait for it to finish. `p2p-dev` deletes `.review-findings.md` once it has
+addressed every finding.
 
-**Stage 2 — `p2p-tester`.** Dispatch the `p2p-tester` agent against the same task folder.
-It runs the suite and audits coverage against `test-plan.md`.
+**Stage 2 — `p2p-tester`.** Dispatch the `p2p-tester` agent against the same task folder. Tell
+it the task folder path only — it reads `test-plan.md` and the `tasks.md` checkboxes, nothing
+else. It runs the suite and audits coverage against `test-plan.md`, and gets one pass at
+fixing a broken test before handing back.
 
-**Stage 3 — `p2p-reviewer`.** Only if the tester returned PASS. Dispatch `p2p-reviewer`.
-For a large or security-sensitive task (`03-Ownership-And-Sharing`, `08-Meal-Planner`,
-`09-Admin-Control-Center`, `10-Security-And-Deployment`, `N2-Recipe-Extractor`), dispatch
-**two reviewers in parallel in a single message** with distinct focus areas — one on
-security and object-level authorization, one on correctness, data integrity, and design
-conformance. Their findings merge into the same file.
+**Stage 3 — `p2p-reviewer`.** Only if the tester returned PASS. Dispatch **one** `p2p-reviewer`.
+A single reviewer is the default for every task. Only dispatch a second, focus-scoped reviewer
+in parallel if the user explicitly asks for it — do not add one on your own judgement, even
+for a large or security-sensitive task.
 
 **Branching.**
-- Tester FAILs → skip review, append findings to `.review-findings.md`, return to Stage 1.
-- Any reviewer says REQUEST CHANGES → append blocking findings, return to Stage 1.
-- Tester PASSes and all reviewers APPROVE → exit the loop and go to Handoff.
+- Tester FAILs → skip review, findings are in `.review-findings.md`, return to Stage 1.
+- Reviewer says REQUEST CHANGES → blocking findings appended to `.review-findings.md`, return
+  to Stage 1.
+- Tester PASSes and the reviewer APPROVEs → exit the loop and go to Handoff.
 - Three iterations without convergence → **stop**. Do not start a fourth. Report what is
   still failing and hand it to the user; a loop that cannot converge in three passes has a
   problem in the plan files, not in the code.
+
+An approving tester or reviewer deletes `.review-findings.md`. Confirm it is gone before
+Handoff — it must never reach a commit.
 
 ## Handoff — the pipeline always ends with the human
 
@@ -134,8 +140,8 @@ When the loop converges, **stop and notify the user for approval.** Present:
 
 1. **Task `$1` is ready for your review** — one line on what now works that did not before.
 2. Every file created or modified, grouped by area.
-3. The final pytest summary and ruff result, as raw output.
-4. Non-blocking suggestions the reviewers raised that you did not action.
+3. The final pytest summary line and ruff result.
+4. Non-blocking suggestions the reviewer raised that you did not action.
 5. Any deviation from `design.md`, flagged clearly.
 6. How to see it working — the URL to visit or the command to run.
 
@@ -146,9 +152,10 @@ Both wait on explicit human approval.
 
 If this run covered only part of the task, say so plainly — which subtasks are done, which
 remain, and the exact command to continue (`/p2p-task 05` picks up from the first unticked
-subtask). Set the task's status to `IN PROGRESS` in `MILESTONES.md` with a note naming the
-last completed subtask.
+subtask). Set the task's status to `IN PROGRESS` in `MILESTONES.md` and update its row to name
+the last completed subtask.
 
-Once the user approves a run that finishes the **final** subtask, set the status to
-`AWAITING APPROVAL` → `COMPLETE`, update the decision log if this task settled anything future
-sessions need to know, and ask whether they want it committed.
+Once the user approves a run that finishes the **final** subtask: set the status to
+`AWAITING APPROVAL` → `COMPLETE`, rewrite the task's `MILESTONES.md` row as a 2–3 line summary
+of what it introduced (no test counts, no iteration history), add any binding decision to
+`Plan/ARCHITECTURE.md`'s decision log, and ask whether they want it committed.

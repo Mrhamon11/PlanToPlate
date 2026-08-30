@@ -15,7 +15,7 @@ reasoning — and the edge cases — actually live.
 
 **Every queryset that can return user data goes through `.visible_to(user)`. Every write path
 goes through `.editable_by(user)` or the `IsOwnerOrReadOnly` permission. Nobody ever hand-rolls
-an ownership filter.** `Plan/MILESTONES.md` section 6 calls this the single most
+an ownership filter.** `Plan/ARCHITECTURE.md` calls this the single most
 security-critical convention in the codebase, and it is enforced two ways:
 
 1. `core/apps.py` registers a `manage.py check` (`core.E001`/`core.E002`) that fails the build if
@@ -146,6 +146,10 @@ class RecipeSerializer(OwnedSerializer):
 `OwnedSerializer` already makes `owner`, `is_system`, `shared_with`, `copied_from`, and
 `visibility` read-only and injects `owner` from `request.user` on create — list them in
 `Meta.fields` if you want them in the response, but never re-declare them as writable.
+`shared_with` is a special case (`ARCHITECTURE.md` D35): it is a `SerializerMethodField` that
+returns the real audience **only to the object's owner** and `[]` to every other reader, so
+listing it in `Meta.fields` is safe — it never becomes a second, ungated path to the audience
+the owner-only `/shares/` action protects.
 `visibility` is deliberately read-only even here: changing it goes through `/share/` (the
 sharing service), which runs the cascade check a bare `PATCH` has no way to know about. Don't
 add a writable `visibility` field to a subclass to "fix" this — that reopens the exact hole

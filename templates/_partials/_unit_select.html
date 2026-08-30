@@ -1,0 +1,26 @@
+{% comment %}
+The app-wide unit picker (Plan/04-Units-And-Ingredients/design.md, "UI": "a shared
+_partials/_unit_select.html, grouped by dimension, used by every quantity field in the app").
+
+Usage: include this partial "with units=... name=... selected=...".
+  units     - a Unit queryset, ordered by dimension (Unit.Meta.ordering already is)
+  name      - the form field name to POST (default "unit")
+  selected  - the currently-selected Unit's pk (int or str), or empty for none
+  field_id  - optional id for the <select> (so a <label for=...> can point at it)
+  required  - truthy to mark the field required and drop the blank option
+
+A fragment, never extends base.html. No visibility concern: Unit is shared vocabulary.
+{% endcomment %}
+<select name="{{ name|default:'unit' }}"{% if field_id %} id="{{ field_id }}"{% endif %}{% if required %} required{% endif %}>
+    {% if not required %}<option value="">—</option>{% endif %}
+    {% regroup units by get_dimension_display as dimension_groups %}
+    {% for group in dimension_groups %}
+        <optgroup label="{{ group.grouper }}">
+            {% for unit in group.list %}
+                <option value="{{ unit.pk }}"{% if unit.pk|stringformat:'s' == selected|stringformat:'s' %} selected{% endif %}>
+                    {{ unit.name }} ({{ unit.abbrev }})
+                </option>
+            {% endfor %}
+        </optgroup>
+    {% endfor %}
+</select>

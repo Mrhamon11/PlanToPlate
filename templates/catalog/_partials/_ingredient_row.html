@@ -1,0 +1,23 @@
+{% comment %}
+Quick-add result fragment (Plan/04-Units-And-Ingredients/design.md, "UI": "Quick-add").
+Designed here, consumed by task 05's recipe editor: a single row for one just-created (or
+already-existing) ingredient, carrying everything the editor needs to turn it into a
+component row without another round trip — pk, display name, and the ingredient's default
+unit. A fragment; never extends base.html.
+
+Data attributes are the contract task 05 reads; the visible text is a sensible default the
+editor may restyle.
+{% endcomment %}
+{% if error %}
+    <p class="field-errors quick-add-error" role="alert">{{ error }}</p>
+{% else %}
+    <div class="ingredient-row"
+         data-ingredient-id="{{ ingredient.pk }}"
+         data-ingredient-name="{{ ingredient.name }}"
+         data-default-unit-id="{{ ingredient.default_unit_id }}"
+         data-default-unit-abbrev="{{ ingredient.default_unit.abbrev }}"
+         data-created="{{ created|yesno:'true,false' }}">
+        <span class="ingredient-name">{{ ingredient.name }}</span>
+        <span class="text-muted">{{ ingredient.default_unit.abbrev }}</span>
+    </div>
+{% endif %}

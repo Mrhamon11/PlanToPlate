@@ -53,13 +53,18 @@ def to_base(quantity: Decimal, unit: Unit) -> Decimal
 def humanize(quantity: Decimal, unit: Unit) -> str
 ```
 
-- **Same dimension:** always works. `q * from.factor / to.factor`.
+- **Same dimension, MASS or VOLUME:** always works. `q * from.factor / to.factor`.
 - **MASS ↔ VOLUME:** only when `ingredient.density_g_per_ml` is set. Otherwise raise
   `IncompatibleUnits`. **Never guess a density** — a wrong conversion produces a confidently
   incorrect shopping list, which is worse than a list that admits it has two separate lines
   for flour.
-- **COUNT ↔ anything:** never. "3 eggs" and "150 g" are only relatable through an
-  ingredient-specific weight, which is out of scope.
+- **COUNT ↔ COUNT:** governed by `Unit.count_family` (D34). The **generic** family
+  (`each`=1, `half dozen`=6, `dozen`=12) interconverts on real ratios via `to_base_factor`.
+  Every packaging/piece unit (can, slice, clove, pinch, package, …) is its **own singleton
+  family** and converts only to itself; any other COUNT↔COUNT pair raises `IncompatibleUnits`
+  naming both units.
+- **COUNT ↔ MASS/VOLUME:** never, even with a density set. "3 eggs" and "150 g" are only
+  relatable through an ingredient-specific piece weight, which is out of scope.
 - All arithmetic in `Decimal` with explicit quantisation. `0.1 + 0.2` in binary float is the
   reason.
 - `humanize` renders "0.25 cup" as "¼ cup" — recipes are read by people, and decimals in a
