@@ -1,0 +1,58 @@
+{% comment %}
+Swappable results region for the recipe list (05.10). Rendered inside #recipe-results on a
+full page load, returned on its own for an htmx filter request
+(core.mixins.HtmxTemplateMixin). A fragment — never extends base.html.
+
+`recipe.my_stats` is the requesting user's own RecipeStats row (0 or 1), prefetched with
+to_attr in RecipeListView — favourite star and rating are always the viewer's, never the
+owner's (design.md, "UI").
+{% endcomment %}
+{% if recipes %}
+    <ul class="recipe-list" role="list">
+        {% for recipe in recipes %}
+            {% with s=recipe.my_stats|first %}
+            <li class="recipe-card">
+                <a class="recipe-card-main" href="{% url 'recipes:recipe-detail' recipe.pk %}">
+                    <span class="recipe-name">{{ recipe.name }}</span>
+                    <span class="text-muted">Makes {{ recipe.yield_quantity|floatformat:"-2" }} {{ recipe.yield_unit.name }}</span>
+                </a>
+                <div class="recipe-card-meta">
+                    {% include "_partials/_ownership_badge.html" with object=recipe %}
+                    <span class="badge">{{ recipe.get_role_display }}</span>
+                    <span class="badge">{{ recipe.prep_minutes|add:recipe.cook_minutes }} min</span>
+                    {% if s and s.is_favorite %}<span class="badge badge-favorite" title="One of your favourites">★ Favourite</span>{% endif %}
+                    {% if s and s.rating %}
+                        <span class="recipe-rating" aria-label="Your rating: {{ s.rating }} out of 5">
+                            {% for _ in "12345"|make_list %}{% if forloop.counter <= s.rating %}★{% else %}☆{% endif %}{% endfor %}
+                        </span>
+                    {% endif %}
+                </div>
+            </li>
+            {% endwith %}
+        {% endfor %}
+    </ul>
+
+    {% if page_obj.has_other_pages %}
+        <nav class="pagination" aria-label="Pagination">
+            <ul role="list">
+                {% if page_obj.has_previous %}
+                    <li>
+                        <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
+                           hx-get="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
+                           hx-target="#recipe-results" hx-swap="innerHTML" hx-push-url="true">Previous</a>
+                    </li>
+                {% endif %}
+                <li aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</li>
+                {% if page_obj.has_next %}
+                    <li>
+                        <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
+                           hx-get="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
+                           hx-target="#recipe-results" hx-swap="innerHTML" hx-push-url="true">Next</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
+{% else %}
+    {% include "_partials/_empty_state.html" with title="No recipes found" message="Try a different search or clear the filters." %}
+{% endif %}

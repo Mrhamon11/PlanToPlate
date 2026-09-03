@@ -46,6 +46,17 @@ def test_flatten_scales_by_factor(make_recipe, make_ingredient, gram, add_ingred
     assert _line_for(lines, "Onion").quantity == Decimal("300")
 
 
+def test_flatten_rejects_float_factor(make_recipe, make_ingredient, gram, add_ingredient):
+    """Task 05 review NB2: a ``float`` factor is refused before it can carry binary rounding
+    error into the flattened quantities (mirrors ``catalog.services.units._as_decimal``).
+    """
+    recipe = make_recipe(name="Salsa")
+    add_ingredient(recipe, make_ingredient("Tomato"), 800, gram, position=0)
+
+    with pytest.raises(TypeError):
+        flatten(recipe, factor=2.0)
+
+
 @pytest.fixture
 def marinara(make_recipe, make_ingredient, gram, add_ingredient, units):
     recipe = make_recipe(name="Marinara", yield_quantity=Decimal("4.000"), yield_unit=units["cup"])

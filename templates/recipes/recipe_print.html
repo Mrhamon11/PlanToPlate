@@ -1,0 +1,43 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ recipe.name }} — PlanToPlate</title>
+    <link rel="stylesheet" href="{% static 'css/print.css' %}">
+</head>
+<body>
+    <div class="print-toolbar">
+        <a href="{% url 'recipes:recipe-detail' recipe.pk %}">&larr; Back to recipe</a>
+        <button type="button" onclick="window.print()">Print</button>
+    </div>
+
+    <article class="print-recipe">
+        <h1>{{ recipe.name }}</h1>
+        {% if recipe.description %}<p class="print-description">{{ recipe.description }}</p>{% endif %}
+
+        <p class="print-meta">
+            Makes {{ recipe.yield_quantity|floatformat:"-2" }} {{ recipe.yield_unit.name }}
+            &middot; {{ recipe.prep_minutes }} min prep &middot; {{ recipe.cook_minutes }} min cook
+            &middot; {{ recipe.get_role_display }}
+        </p>
+
+        {% if recipe.tags.all %}
+            <p class="print-tags">
+                {% for tag in recipe.tags.all %}{{ tag.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </p>
+        {% endif %}
+
+        <h2>Ingredients</h2>
+        {% include "recipes/_partials/_print_components.html" with components=recipe.components.all %}
+
+        <h2>Instructions</h2>
+        <div class="print-instructions">{{ recipe.instructions|linebreaksbr }}</div>
+
+        {% if recipe.notes %}
+            <h2>Notes</h2>
+            <div class="print-notes">{{ recipe.notes|linebreaksbr }}</div>
+        {% endif %}
+    </article>
+</body>
+</html>

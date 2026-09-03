@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Recipes — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Recipes</h1>
+    <a class="btn btn-primary" href="{% url 'recipes:recipe-create' %}">New recipe</a>
+</div>
+
+{% comment %}
+One GET form drives search, the role select, tag chips, the time/rating limits and the
+favourites toggle. htmx swaps only the results region; with JavaScript off the same form
+submits a normal GET and the whole page re-renders (design.md, "UI").
+{% endcomment %}
+<form class="ingredient-filters"
+      method="get"
+      action="{% url 'recipes:recipe-list' %}"
+      hx-get="{% url 'recipes:recipe-list' %}"
+      hx-target="#recipe-results"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      hx-trigger="submit, change, keyup changed delay:300ms from:input[name='search']">
+    <div class="field">
+        <label for="recipe-search">Search</label>
+        <input type="search" id="recipe-search" name="search"
+               value="{{ search }}" placeholder="Search recipes" autocomplete="off">
+    </div>
+
+    <div class="field">
+        <label for="recipe-role">Role</label>
+        <select id="recipe-role" name="role">
+            <option value="">Any role</option>
+            {% for value, label in roles %}
+                <option value="{{ value }}" {% if value == selected_role %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="field">
+        <label for="recipe-max-minutes">Max total minutes</label>
+        <input type="number" id="recipe-max-minutes" name="max_minutes" min="0" inputmode="numeric"
+               value="{{ max_minutes }}" placeholder="e.g. 45">
+    </div>
+
+    <div class="field">
+        <label for="recipe-min-rating">Minimum rating (yours)</label>
+        <select id="recipe-min-rating" name="min_rating">
+            <option value="">Any</option>
+            {% for n in "12345"|make_list %}
+                <option value="{{ n }}" {% if n == min_rating %}selected{% endif %}>{{ n }}+ stars</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <label class="checkbox-inline">
+        <input type="checkbox" name="favorite" value="1" {% if favorite_only %}checked{% endif %}>
+        Favourites only
+    </label>
+
+    {% comment %}
+    A plain link, not an hx-get: clearing filters must also reset every visible field, which a
+    full re-render of the page from a bare GET does for free. Always shown (dev-test: "always
+    visible"); it just reloads the unfiltered list when nothing is set.
+    {% endcomment %}
+    <a class="btn btn-clear-filters" href="{% url 'recipes:recipe-list' %}"
+       {% if not has_active_filters %}aria-disabled="true"{% endif %}>Clear filters</a>
+
+    {% if all_tags %}
+        <fieldset class="tag-chips">
+            <legend>Filter by tag</legend>
+            {% for tag in all_tags %}
+                <label class="chip">
+                    <input type="checkbox" name="tags" value="{{ tag.slug }}"
+                           {% if tag.slug in selected_tags %}checked{% endif %}>
+                    <span>{{ tag.name }}</span>
+                </label>
+            {% endfor %}
+        </fieldset>
+    {% endif %}
+
+    <noscript><button type="submit" class="btn">Apply</button></noscript>
+</form>
+
+<div id="recipe-results">
+    {% include "recipes/_partials/_recipe_results.html" %}
+</div>
+{% endblock %}

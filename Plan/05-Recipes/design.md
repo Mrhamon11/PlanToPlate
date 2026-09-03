@@ -178,7 +178,10 @@ transaction. Separate component endpoints would let a client leave a recipe half
   and filter chips.
 - **Recipe detail** — ingredients (with a scale control that re-renders quantities via HTMX,
   persisting nothing), instructions, times, tags, notes, "I made this" button, rating widget,
-  and a **sub-recipe expander** that inlines a sub-recipe's ingredients without leaving the page.
+  and a **sub-recipe expander** that inlines a sub-recipe's ingredients without leaving the
+  page (a toggle — click again to collapse). Owner-only **Edit / Share / Delete** actions;
+  delete is an owner-only confirm page that refuses (naming the parents) if the recipe is used
+  as a sub-recipe, sharing `recipes.services.deletion` with the REST `DELETE`.
 - **Recipe form** — the substantial screen:
   - Component rows added/removed via HTMX, each row being ingredient-or-sub-recipe, quantity,
     unit, note.
@@ -188,7 +191,12 @@ transaction. Separate component endpoints would let a client leave a recipe half
     the candidate list, so the illegal choice is not merely rejected, it is never offered.
   - Reorder with up/down buttons (touch parity, per task 02); drag is a desktop enhancement.
   - Required yield with a sensible default.
-- **Print view** — a clean, ink-light stylesheet. People cook from paper.
+- **Print view** — a clean, ink-light stylesheet. People cook from paper. A sub-recipe prints
+  its own ingredients inlined and indented under its line (a bare "1 cup Marinara" cannot be
+  shopped or cooked from); the whole graph is prefetched (`with_component_graph`) so this adds
+  no queries.
+- **Recipe list** — the filter form also carries an always-visible **Clear filters** link
+  (a plain link, so it resets every field, not just the results).
 
 ## Edge cases
 

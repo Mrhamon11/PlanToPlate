@@ -38,6 +38,23 @@ _FRIENDLY_LOW = Decimal(1)
 _FRIENDLY_HIGH = Decimal(1000)
 
 
+def _factor_as_decimal(value: Decimal | int | str) -> Decimal:
+    """Coerce a scaling factor to ``Decimal``, refusing a ``float`` at the boundary rather than
+    silently coercing it — ``Decimal(0.1)`` carries the binary-float rounding error the "Decimal
+    end to end" DoD exists to keep out of a scaled quantity (task 05 review NB2, mirroring
+    ``catalog.services.units._as_decimal``). A caller holding a float converts on their side of
+    the seam (``Decimal(str(x))``), or better, never has one.
+    """
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, float):
+        raise TypeError(
+            f"factor must be a Decimal, int, or str — got float {value!r}. "
+            "Binary float rounding corrupts kitchen quantities; convert before calling."
+        )
+    return Decimal(str(value))
+
+
 class FlattenError(Exception):
     """A recipe cannot be flattened: a sub-recipe has a non-positive yield, or its yield is
     measured in a dimension the calling quantity cannot be converted to (design.md, "Edge
@@ -66,7 +83,7 @@ def scale(recipe: Recipe, factor: Decimal) -> list[RecipeComponent]:
     """
     from recipes.models import RecipeComponent
 
-    factor = Decimal(factor)
+    factor = _factor_as_decimal(factor)
     scaled: list[RecipeComponent] = []
     for component in recipe.components.all():
         scaled.append(
@@ -101,6 +118,7 @@ def flatten(
     recipe is re-fetched with the prefetch applied. A caller flattening many recipes — the meal
     planner over a week of dinners — should prefetch once and pass the prefetched instances in.
     """
+    factor = _factor_as_decimal(factor)
     if _has_component_graph(recipe):
         prefetched = recipe
     else:
@@ -110,7 +128,7 @@ def flatten(
     lines: list[FlatLine] = []
     _flatten_into(
         prefetched,
-        Decimal(factor),
+        factor,
         name_path=(prefetched.name,),
         id_path=(prefetched.pk,),
         depth=0,

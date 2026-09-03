@@ -121,6 +121,13 @@ class Copier:
         self._max_depth = max_depth
         self._max_nodes = max_nodes
 
+    @property
+    def actor(self) -> AbstractBaseUser:
+        """The user the copies are being made for. A ``copy_children`` override needs this to
+        decide whether the actor already owns a reusable copy of one of its children (see
+        ``recipes.models._copy_or_reference``)."""
+        return self._actor
+
     def copy(self, dependency: OwnedModel) -> OwnedModel:
         """Return the copy of ``dependency``, creating it (and recursively, its own children)
         the first time it is seen in this operation. A later reference to the same dependency

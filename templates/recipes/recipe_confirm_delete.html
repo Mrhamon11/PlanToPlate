@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ recipe.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+{% url 'recipes:recipe-delete' recipe.pk as delete_url %}
+{% url 'recipes:recipe-detail' recipe.pk as cancel_url %}
+{% include "_partials/_confirm_delete.html" with object_name=recipe.name delete_url=delete_url cancel_url=cancel_url %}
+{% endblock %}

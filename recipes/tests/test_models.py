@@ -8,6 +8,7 @@ import pytest
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 
+from catalog.models import Ingredient
 from core.models import OwnedModel, Visibility
 from core.services.copying import copy_object
 from recipes.models import Recipe, RecipeComponent, RecipeRole
@@ -179,6 +180,61 @@ def test_copy_children_recurses_into_subrecipes_and_owns_the_tree(
     gravy.refresh_from_db()
     assert gravy.owner == alice
     assert gravy.components.get().ingredient_id == stock_ingredient.pk
+
+
+def test_copy_reuses_actors_existing_copy_of_a_shared_private_ingredient(
+    alice, bob, gram, make_recipe, make_ingredient, add_ingredient
+):
+    """Copying two recipes that share one private ingredient must not create the ingredient
+    copy twice — the second would violate ``Ingredient``'s ``(owner, name)`` uniqueness and
+    raise ``IntegrityError`` (task 05 dev-test finding). The second copy reuses the first.
+    """
+    rub = make_ingredient("House Rub", owner=alice, visibility=Visibility.PUBLIC)
+    first = make_recipe(name="Roast", owner=alice, visibility=Visibility.PUBLIC)
+    add_ingredient(first, rub, 20, gram)
+    second = make_recipe(name="Wings", owner=alice, visibility=Visibility.PUBLIC)
+    add_ingredient(second, rub, 5, gram)
+
+    first_copy = copy_object(first, actor=bob)
+    second_copy = copy_object(second, actor=bob)  # must not raise
+
+    bobs_rub = first_copy.components.get().ingredient
+    assert second_copy.components.get().ingredient_id == bobs_rub.pk
+    assert Ingredient.objects.filter(owner=bob, name="House Rub").count() == 1
+
+
+def test_recopying_a_recipe_reuses_the_first_copys_subtree(
+    alice, bob, gram, cup, make_recipe, make_ingredient, add_ingredient, add_sub_recipe
+):
+    bones = make_ingredient("Bones", owner=alice, visibility=Visibility.PUBLIC)
+    gravy = make_recipe(name="Gravy", owner=alice, visibility=Visibility.PUBLIC)
+    add_ingredient(gravy, bones, 100, gram)
+    roast = make_recipe(name="Roast", owner=alice, visibility=Visibility.PUBLIC)
+    add_sub_recipe(roast, gravy, 1, cup)
+
+    first = copy_object(roast, actor=bob)
+    second = copy_object(roast, actor=bob)  # must not raise
+
+    assert second.components.get().sub_recipe_id == first.components.get().sub_recipe_id
+    assert Recipe.objects.filter(owner=bob, name="Gravy").count() == 1
+    assert Ingredient.objects.filter(owner=bob, name="Bones").count() == 1
+
+
+def test_copy_reuses_an_existing_same_named_ingredient_from_a_different_origin(
+    alice, bob, gram, make_recipe, make_ingredient, add_ingredient
+):
+    """``bob`` already owns a hand-made "Paprika" and ``catalog`` will not let him own a second.
+    Copying ``alice``'s recipe that references *her* "Paprika" points the copied component at
+    ``bob``'s existing one rather than raising ``IntegrityError``.
+    """
+    bobs_paprika = make_ingredient("Paprika", owner=bob, visibility=Visibility.PRIVATE)
+    alices_paprika = make_ingredient("Paprika", owner=alice, visibility=Visibility.PUBLIC)
+    recipe = make_recipe(name="Alice Stew", owner=alice, visibility=Visibility.PUBLIC)
+    add_ingredient(recipe, alices_paprika, 3, gram)
+
+    copy = copy_object(recipe, actor=bob)
+
+    assert copy.components.get().ingredient_id == bobs_paprika.pk
 
 
 def test_hooks_return_dependencies(

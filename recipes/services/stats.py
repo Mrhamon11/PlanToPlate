@@ -70,3 +70,17 @@ def toggle_favorite(user: object, recipe: Recipe) -> RecipeStats:
     stats.is_favorite = not stats.is_favorite
     stats.save(update_fields=["is_favorite"])
     return stats
+
+
+@transaction.atomic
+def set_favorite(user: object, recipe: Recipe, is_favorite: bool) -> RecipeStats:
+    """Set the user's favourite flag for ``recipe`` to a specific value.
+
+    ``toggle_favorite`` backs the one-tap UI control; ``set_favorite`` backs the idempotent
+    ``PUT /api/recipes/<id>/stats/`` write, where the client sends the desired end state rather
+    than a toggle intent.
+    """
+    stats, _ = RecipeStats.objects.get_or_create(user=user, recipe=recipe)
+    stats.is_favorite = is_favorite
+    stats.save(update_fields=["is_favorite"])
+    return stats

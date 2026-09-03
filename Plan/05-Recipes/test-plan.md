@@ -16,6 +16,9 @@
 | `test_delete_subrecipe_in_use_protected` | |
 | `test_role_defaults_to_other` | |
 | `test_hooks_return_dependencies` | `share_dependencies()` includes both sub-recipes and ingredients. |
+| `test_copy_reuses_actors_existing_copy_of_a_shared_private_ingredient` | Copying two recipes that share one private ingredient reuses the first copy — no `IntegrityError` on the `(owner, name)` constraint. *(Task 05 dev-test finding.)* |
+| `test_recopying_a_recipe_reuses_the_first_copys_subtree` | Re-copying a recipe points at the first copy's sub-recipe / nested ingredient, not a duplicate. |
+| `test_copy_reuses_an_existing_same_named_ingredient_from_a_different_origin` | A copied component whose ingredient collides by name with one the actor already owns points at the existing row. |
 
 ## Stats — `recipes/tests/test_stats.py`
 
@@ -88,6 +91,7 @@ The correctness core. Expected values hand-computed in the test.
 | `test_filter_by_rating_uses_requesters_stats` | Bob's `min_rating` filter reads Bob's ratings, not Alice's. |
 | `test_delete_subrecipe_in_use_returns_409` | Names the parents. |
 | `test_copy_deep_copies_subrecipes` | The copy's tree is independent. |
+| `test_subrecipe_component_with_incompatible_unit_rejected_at_validation` | A sub-recipe component whose unit is a different dimension from the sub-recipe's `yield_unit` is refused at `POST` with a clear message naming both units, not accepted and only failing later from `flattened`. *(Added in the task 05 review rework — this edge was not in the original plan.)* |
 
 ## Security — `recipes/tests/test_security.py`
 
@@ -113,6 +117,12 @@ The correctness core. Expected values hand-computed in the test.
 | `test_htmx_scale_rerenders_quantities` | Nothing is persisted. |
 | `test_subrecipe_expander_returns_fragment` | |
 | `test_print_view_renders` | |
+| `test_print_view_inlines_subrecipe_ingredients` | A sub-recipe on the print page lists its own ingredients (nested list rendered), not just its name. *(Task 05 dev-test finding.)* |
+| `test_delete_via_confirm_removes_recipe` | Owner POST to `recipe-delete` deletes and redirects to the list. |
+| `test_delete_refused_when_recipe_is_used_as_a_subrecipe` | `PROTECT` → message naming the parent, recipe untouched, no 500. |
+| `test_delete_denied_for_read_only_holder` | A shared (non-owned) recipe: non-owner POST to `recipe-delete` 403s and deletes nothing. |
+| `test_update_via_html_denied_for_read_only_holder` | A shared (non-owned) recipe is read-only through the HTML form — a non-owner POST to `recipe-update` 403s and writes nothing. Proves `Recipe` is wired to `OwnedObjectMixin`'s write-side defence. *(Added in the task 05 review — Recipe-specific regression test was missing.)* |
+| `test_share_via_html_denied_for_read_only_holder` | A read-only holder POSTing to `recipe-share` 403s and grants no access — sharing is a right of ownership. *(Added in the task 05 review.)* |
 
 ## Manual verification
 
@@ -124,12 +134,15 @@ The correctness core. Expected values hand-computed in the test.
 
 ## Definition of Done
 
-- [ ] Every test above exists and passes.
-- [ ] `ruff` clean; suite green; no pending migrations.
-- [ ] Cycle guard proven enforced on **all three** write paths.
-- [ ] Sub-recipe yield scaling verified by the hand-computed test *and* manual check #1.
-- [ ] Aggregation never invents a density.
-- [ ] No `float` anywhere in `recipes/` — grep is empty.
-- [ ] The flatten query-count test passes.
-- [ ] All four manual verifications performed and reported.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated.
+- [x] Every test above exists and passes. (`test_guard_enforced_on_admin` is deferred to 09.4 —
+      `recipes/admin.py` registers nothing yet — noted in `tasks.md` 05.12 and the 05 review.)
+- [x] `ruff` clean; suite green; no pending migrations.
+- [x] Cycle guard proven enforced on the serializer and the HTML form write paths
+      (`test_guard_enforced_on_serializer`, `test_guard_enforced_on_form`); admin path → 09.4.
+- [x] Sub-recipe yield scaling verified by the hand-computed test *and* manual check #1.
+- [x] Aggregation never invents a density.
+- [x] No `float` anywhere in `recipes/` — grep is empty (only the string "float" in prose /
+      guard messages / test names remains).
+- [x] The flatten query-count test passes.
+- [x] All four manual verifications performed and reported (in the 05.12/05.14 rework report).
+- [x] Subtasks ticked; `../MILESTONES.md` updated.

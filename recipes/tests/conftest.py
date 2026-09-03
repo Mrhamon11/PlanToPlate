@@ -11,7 +11,7 @@ from decimal import Decimal
 
 import pytest
 
-from catalog.models import Dimension, Ingredient, Unit
+from catalog.models import Dimension, Ingredient, Tag, Unit
 from core.models import Visibility
 from recipes.models import Recipe, RecipeComponent
 
@@ -110,6 +110,15 @@ def make_recipe(db, alice, cup):
         recipe = Recipe(**defaults)
         recipe.save()
         return recipe
+
+    return _make
+
+
+@pytest.fixture
+def make_tag(db):
+    def _make(name: str, kind: str = Tag._meta.get_field("kind").default) -> Tag:
+        tag, _ = Tag.objects.get_or_create(name=name, defaults={"kind": kind})
+        return tag
 
     return _make
 

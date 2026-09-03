@@ -42,3 +42,22 @@ def test_scale_fractional_factor(recipe_with_two_ingredients):
     scaled = scale(recipe_with_two_ingredients, Decimal("0.5"))
 
     assert sorted(c.quantity for c in scaled) == [Decimal("15"), Decimal("50")]
+
+
+def test_scale_accepts_str_and_int_factor(recipe_with_two_ingredients):
+    assert sorted(c.quantity for c in scale(recipe_with_two_ingredients, "2")) == [
+        Decimal("60"),
+        Decimal("200"),
+    ]
+    assert sorted(c.quantity for c in scale(recipe_with_two_ingredients, 2)) == [
+        Decimal("60"),
+        Decimal("200"),
+    ]
+
+
+def test_scale_rejects_float_factor(recipe_with_two_ingredients):
+    """Task 05 review NB2: a ``float`` factor carries binary rounding error into the scaled
+    ``Decimal`` — refused at the boundary, mirroring ``catalog.services.units._as_decimal``.
+    """
+    with pytest.raises(TypeError):
+        scale(recipe_with_two_ingredients, 0.5)

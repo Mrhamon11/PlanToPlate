@@ -1,0 +1,29 @@
+{% comment %}
+Recursive ingredient list for the print page. An ingredient row prints quantity / unit / name;
+a sub-recipe row prints the same, then its own components one indent deeper so the cook has the
+full shopping-and-cooking list on paper (design.md, "UI").
+
+The recipe graph is acyclic (the cycle guard) and RecipePrintView loads it via
+with_component_graph(), so this recursion terminates and adds no queries.
+
+Context:
+  components — an iterable of RecipeComponent (recipe.components.all, or a sub-recipe's)
+{% endcomment %}
+<ul class="print-ingredients">
+    {% for component in components %}
+        <li>
+            {{ component.quantity|floatformat:"-3" }} {{ component.unit.name }}
+            {% if component.ingredient_id %}
+                {{ component.ingredient.name }}
+            {% elif component.sub_recipe_id %}
+                {{ component.sub_recipe.name }} <em>(sub-recipe)</em>
+            {% endif %}
+            {% if component.note %}— {{ component.note }}{% endif %}
+            {% if component.sub_recipe_id %}
+                {% include "recipes/_partials/_print_components.html" with components=component.sub_recipe.components.all %}
+            {% endif %}
+        </li>
+    {% empty %}
+        <li>No ingredients listed.</li>
+    {% endfor %}
+</ul>

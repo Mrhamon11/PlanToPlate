@@ -35,12 +35,42 @@ def validate_positive_yield(value: object) -> None:
         )
 
 
+def _existing_copy_for(node: OwnedModel, actor) -> OwnedModel | None:
+    """The copy of ``node`` that ``actor`` already owns, if any — so a second copy operation
+    reuses it instead of trying (and, for ``Ingredient``, failing) to create a duplicate.
+
+    Matched first on lineage (``copied_from``); then, for ``Ingredient`` only, on name.
+    ``catalog`` enforces one ingredient per ``(owner, name)``, so if the actor already owns a
+    same-named ingredient — one they copied earlier from a *different* origin, or made by hand
+    — a second copy literally cannot be stored and reusing theirs is the only non-erroring
+    outcome. ``Recipe`` has no such constraint, so a same-named recipe from another origin is
+    left to copy normally rather than silently collapsed into an unrelated one.
+    """
+    manager = type(node)._default_manager
+    by_lineage = manager.filter(copied_from=node, owner=actor).order_by("pk").first()
+    if by_lineage is not None:
+        return by_lineage
+    if isinstance(node, Ingredient):
+        return manager.filter(owner=actor, name__iexact=node.name).order_by("pk").first()
+    return None
+
+
 def _copy_or_reference(node: OwnedModel, copier: Copier) -> OwnedModel:
-    """A system node is shared vocabulary — return it unchanged. Anything else is deep-copied
-    so the copy owns its whole tree (see ``Recipe.copy_children``).
+    """Resolve what a copied component should point at for its ingredient / sub-recipe.
+
+    - A *system* node is shared vocabulary — return it unchanged.
+    - A node ``copier.actor`` has *already copied* (in an earlier operation, or earlier in this
+      one) is reused rather than copied again. Without this, copying two recipes that share a
+      private ingredient — or re-copying a recipe — hits the ``(owner, name)`` uniqueness
+      constraint on ``Ingredient`` and raises ``IntegrityError``; reuse also keeps a user's
+      catalog free of "Baharat", "Baharat (2)", … duplicates (task 05 dev-test finding).
+    - Anything else is deep-copied so the copy owns its whole tree (see ``Recipe.copy_children``).
     """
     if node.is_system:
         return node
+    existing = _existing_copy_for(node, copier.actor)
+    if existing is not None:
+        return existing
     return copier.copy(node)
 
 
@@ -66,7 +96,7 @@ class Recipe(OwnedModel):
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    instructions = models.TextField(blank=True)
+    instructions = models.TextField()
     yield_quantity = models.DecimalField(
         max_digits=10,
         decimal_places=3,
@@ -98,6 +128,11 @@ class Recipe(OwnedModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def get_absolute_url(self) -> str:
+        from django.urls import reverse
+
+        return reverse("recipes:recipe-detail", args=[self.pk])
 
     def _component_dependencies(self) -> list[OwnedModel]:
         deps: list[OwnedModel] = []
