@@ -156,6 +156,11 @@ All the hard parts — flattening, sub-recipe yield scaling, aggregation, idempo
 regeneration — already live in tasks 05–07. This task only orchestrates. If this function
 turns out to need new logic here, something was built in the wrong place.
 
+Note (task 05 review): `FlatLine.from_recipes` is the full root→leaf recipe chain per line,
+not just the recipe that directly lists the ingredient. The exclusion check
+("checked through the flattened ingredient set") is unaffected, but any provenance display
+built on it should account for the full chain.
+
 ## API
 
 | Route | Notes |

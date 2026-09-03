@@ -1,0 +1,25 @@
+{% comment %}
+Sub-recipe typeahead results for the recipe editor (Plan/05-Recipes/design.md, "UI":
+"Sub-recipe typeahead excluding anything that would create a cycle — the server filters the
+candidate list, so the illegal choice is not merely rejected, it is never offered"). A
+fragment.
+
+recipes.services.components.sub_recipe_choices has already filtered through
+.visible_to(request.user) AND through assert_no_cycle for the recipe being edited — an
+invisible name and a cycle-creating candidate are both absent from this list.
+{% endcomment %}
+<ul class="typeahead-results" role="listbox">
+    {% for recipe in recipes %}
+        <li role="option">
+            <button type="button" class="typeahead-option" data-choose
+                    data-kind="sub_recipe"
+                    data-ref="{{ recipe.pk }}"
+                    data-label="{{ recipe.name }}">
+                <span class="typeahead-name">{{ recipe.name }}</span>
+                <span class="text-muted">makes {{ recipe.yield_quantity|floatformat:"-2" }} {{ recipe.yield_unit.abbrev }}</span>
+            </button>
+        </li>
+    {% empty %}
+        <li class="text-muted typeahead-empty">No matching sub-recipes.</li>
+    {% endfor %}
+</ul>

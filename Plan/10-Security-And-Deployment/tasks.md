@@ -21,6 +21,15 @@
     non-POST leaves the suite green. One `client.get("/admin/login/")` asserting 200 and a
     form in the body closes it.
 
+  **One item deferred here from task 05 review (non-blocking):** the recipe `flattened` /
+  `scaled` API actions (and the `flatten` service) do not apply the "invisible component
+  degrades gracefully" defence-in-depth that `RecipeSerializer` does. The share cascade should
+  make an invisible sub-recipe/ingredient unreachable through a shared recipe, so this is not
+  exploitable today — but `design.md` frames that degradation as cover "for the case where the
+  cascade has a bug", and `flatten` leaks *more* than the serializer in that scenario (full
+  nested ingredient list + every sub-recipe name via `FlatLine.from_recipes`). Add a
+  sub-recipe/ingredient visibility check in `flatten` (or the actions) and a test.
+
 - [ ] **10.2 — Input validation sweep**
   Length caps on all text fields, bounds on decimals, validators on every user-writable field.
   *Files:* across all apps

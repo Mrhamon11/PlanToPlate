@@ -191,9 +191,16 @@ def copy_object(obj, *, actor, deep=True) -> OwnedModel
 else's rows breaks the moment they edit or delete. `copied_from` preserves the provenance link
 for display ("copied from Alice's Roast Chicken") without creating the dependency.
 
-Deduplication — noticing that the sub-recipe you are copying is byte-identical to one you
-already own — is explicitly **out of scope**. It is a nice idea that turns into an identity
-problem, and 20 users can tolerate some duplication.
+Deduplication in the general sense — noticing that the sub-recipe you are copying is
+byte-identical to one you already own — is **out of scope**. It is a nice idea that turns into
+an identity problem, and 20 users can tolerate some duplication.
+
+The one narrow exception, added in the task 05 dev test: a copy **reuses** a child the actor
+has already copied (matched on `copied_from`, then — for `Ingredient` only, whose `(owner,
+name)` uniqueness makes a second copy unstorable — on name). Without this, copying two recipes
+that share a private ingredient, or re-copying a recipe, raises `IntegrityError`. Reuse means a
+re-copied sub-tree is shared with the earlier copy rather than duplicated; this is the
+accepted trade-off (`recipes.models._copy_or_reference`).
 
 ## Deleting a user
 

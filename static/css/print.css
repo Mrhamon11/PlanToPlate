@@ -1,0 +1,118 @@
+/* Print stylesheet for the recipe print view (Plan/05-Recipes, 05.13).
+
+   Deliberately standalone — recipe_print.html loads only this file, not app.css — and
+   ink-light: near-white ground, black text, no fills or shadows, so a home printer is not
+   asked to lay down a page of colour. People cook from paper (design.md, "UI"). */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1.5rem;
+  color: #111;
+  background: #fff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 12pt;
+  line-height: 1.5;
+}
+
+.print-recipe {
+  max-width: 40rem;
+  margin-inline: auto;
+}
+
+h1 {
+  font-size: 22pt;
+  margin: 0 0 0.25rem;
+}
+
+h2 {
+  font-size: 14pt;
+  margin: 1.5rem 0 0.5rem;
+  border-bottom: 1px solid #000;
+  padding-bottom: 0.15rem;
+}
+
+.print-description {
+  font-style: italic;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.print-meta {
+  margin: 0 0 0.5rem;
+  font-size: 10.5pt;
+}
+
+.print-tags {
+  margin: 0 0 0.5rem;
+  font-size: 10.5pt;
+  color: #333;
+}
+
+.print-ingredients {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.print-ingredients li {
+  margin-bottom: 0.25rem;
+  break-inside: avoid;
+}
+
+/* A sub-recipe's own ingredients, nested under its line. */
+.print-ingredients .print-ingredients {
+  margin: 0.2rem 0 0.4rem;
+  padding-left: 1.1rem;
+  list-style: circle;
+  font-size: 11pt;
+}
+
+.print-instructions,
+.print-notes {
+  white-space: normal;
+}
+
+/* On-screen toolbar — hidden from the printed page. */
+.print-toolbar {
+  max-width: 40rem;
+  margin: 0 auto 1.5rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-family: system-ui, sans-serif;
+  font-size: 11pt;
+}
+
+.print-toolbar button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #111;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+@media print {
+  body {
+    padding: 0;
+  }
+
+  .print-toolbar {
+    display: none;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  h2 {
+    break-after: avoid;
+  }
+}

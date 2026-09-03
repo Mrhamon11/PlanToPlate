@@ -154,7 +154,7 @@ Recipe(OwnedModel)
     name, instructions
     yield_quantity: Decimal, yield_unit → Unit        # REQUIRED — sub-recipes cannot scale without it
     prep_minutes: int, cook_minutes: int
-    role: PROTEIN | CARB | VEGETABLE | ONE_POT | SAUCE | DESSERT | OTHER
+    role: PROTEIN | CARB | VEGETABLE | ONE_POT | SAUCE | DESSERT | SIDE | BREAKFAST | OTHER   # D36
     tags M2M(Tag)
 
 RecipeComponent
@@ -210,7 +210,8 @@ hand-roll an ownership filter in a view.
   its Recipes, their Ingredients, and sub-recipes). The share is refused if a child cannot be
   granted. Unsharing does **not** cascade back (D31).
 - **Copy = deep snapshot.** Copying a Dish gives you your own Recipes, with `copied_from`
-  recording provenance. No pointers into someone else's data.
+  recording provenance. No pointers into someone else's data. Exception: a child you have
+  **already copied** is reused, not copied again (D37).
 - `is_system` objects are readable by everyone, writable by no one through the API — only
   fixtures and the admin.
 
@@ -333,6 +334,8 @@ remains is what a future session needs to respect.
 | D33 | `OwnedModel` carries an explicit `contains_owned_children: bool | None = None` opt-out, consulted by `core/tests/test_conventions.py`'s hooks-guard before its relation-walk heuristic. A leaf model reached through a two-parent join table (the `RecipeComponent` shape task 05 adds) is indistinguishable from a container to a relation walk, so a leaf declares `contains_owned_children = False` rather than silencing the guard with a no-op hook. Full contract in `core/README.md`. |
 | D34 | **COUNT ↔ COUNT conversion contract.** `Unit.count_family: str` (blank for MASS/VOLUME). The **generic** family (`each`=1, `half dozen`=6, `dozen`=12) interconverts on real ratios via `to_base_factor`. Every packaging/piece unit (can, slice, clove, pinch, package, bunch, head, stalk, sprig, stick, leaf, piece) is its **own singleton family** and converts only to itself. `catalog.services.units.convert` raises `IncompatibleUnits` (naming both units) for any COUNT↔COUNT pair not sharing a non-empty family. Cross-dimension COUNT↔MASS/VOLUME stays categorically refused. Task 05's `flatten`/aggregation must treat that `IncompatibleUnits` like a missing density — keep the lines separate. |
 | D35 | **`shared_with` is owner-only on read.** The share audience is itself sensitive (task 03 `design.md`: "the audience list is itself sensitive"), and the `/shares/` action already gates it to the owner. `OwnedSerializer.shared_with` is therefore a `SerializerMethodField` returning the audience only when `request.user` owns the object and `[]` for everyone else (a read-only holder, any viewer of a PUBLIC object). Every downstream owned resource inherits this. `core/README.md`'s "list it in `Meta.fields` if you want it in the response" still holds — the field stays in the response for all readers, it just carries `[]` for non-owners rather than leaking the list. First enforced on `Ingredient` (task 04). |
+| D37 | **A deep copy reuses a child the actor has already copied, rather than copying it again.** Task 03's plan said copy-dedup was out of scope; task 05's dev test found this is not optional for `Ingredient` — its `(owner, name)` uniqueness makes a second copy unstorable, so copying two recipes that share a private ingredient (or re-copying one recipe) raised `IntegrityError`. `recipes.models._copy_or_reference` now resolves a child to an existing copy the actor owns — matched on `copied_from`, then (for `Ingredient` only) on name — before falling back to `Copier.copy`. Trade-off: a re-copied sub-tree is **shared** with the earlier copy, not duplicated. `Copier.actor` is exposed for this. Any future `OwnedModel` with a `copy_children` hook and a per-owner uniqueness constraint must apply the same rule. |
+| D36 | **`Recipe.role` has 9 values, not 7.** Task 05's `design.md` lists `PROTEIN / CARB / VEGETABLE / ONE_POT / SAUCE / DESSERT / SIDE / BREAKFAST / OTHER`; §4 above originally carried only the first six plus `OTHER`. `SIDE` and `BREAKFAST` are real planner categories (a side dish is not a `VEGETABLE`; breakfast recipes must be selectable for the planner's optional breakfast slot, §5 gear 1) and the implementation follows `design.md`. `default=OTHER`, `db_index=True`. Adding a tenth role is a decision to record here, like the planner's eight gears. |
 
 ### Corrections to the original requirements
 

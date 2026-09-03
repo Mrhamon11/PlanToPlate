@@ -1,0 +1,38 @@
+{% comment %}
+Ingredient typeahead results for the recipe editor (Plan/05-Recipes/design.md, "UI":
+"Ingredient typeahead against visible_to, with task 04's quick-add inline when nothing
+matches"). A fragment. The list is already filtered through .visible_to(request.user) in
+recipes.services.components.ingredient_choices — an invisible ingredient's name never reaches
+here.
+
+recipe-editor.js reads data-choose / data-kind / data-ref / data-label / data-unit-id off the
+buttons; the quick-add button posts to catalog:ingredient-quick-add, whose _ingredient_row.html
+fragment the same script turns into a chosen row.
+{% endcomment %}
+<ul class="typeahead-results" role="listbox">
+    {% for ingredient in ingredients %}
+        <li role="option">
+            <button type="button" class="typeahead-option" data-choose
+                    data-kind="ingredient"
+                    data-ref="{{ ingredient.pk }}"
+                    data-label="{{ ingredient.name }}"
+                    data-unit-id="{{ ingredient.default_unit_id }}">
+                <span class="typeahead-name">{{ ingredient.name }}</span>
+                <span class="text-muted">{{ ingredient.default_unit.abbrev }}</span>
+            </button>
+        </li>
+    {% empty %}
+        <li class="text-muted typeahead-empty">No matching ingredients.</li>
+    {% endfor %}
+    {% if query %}
+        <li>
+            <button type="button" class="typeahead-option typeahead-quickadd"
+                    hx-post="{{ quick_add_url }}"
+                    hx-vals='{"name": "{{ query|escapejs }}"}'
+                    hx-target="closest .component-results"
+                    hx-swap="innerHTML">
+                &plus; Create &ldquo;{{ query }}&rdquo;
+            </button>
+        </li>
+    {% endif %}
+</ul>

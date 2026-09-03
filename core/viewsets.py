@@ -46,6 +46,14 @@ _ACTION_PERMISSION_CLASSES: dict[str, type[BasePermission]] = {
     # shares audience list is as sensitive as share/unshare — see the `shares` action itself.
     "shares": IsOwner,
     "copy": CanCopy,
+    # Per-user stats actions (task 05's `made` / `stats`): the write lands on a
+    # ``RecipeStats``/``DishStats`` row keyed to ``request.user``, never on the owned object
+    # itself, so ``IsOwnerOrReadOnly`` is the wrong gate — a recipe shared or made public to
+    # someone exists precisely so they can rate it and mark it made. ``CanCopy`` ("if you can
+    # see it, you can act on your own copy of its per-user state") is the right rule; the
+    # object is still fetched through ``.visible_to()`` first, so an invisible one 404s.
+    "made": CanCopy,
+    "stats": CanCopy,
 }
 
 

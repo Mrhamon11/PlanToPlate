@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if object %}Edit {{ object.name }}{% else %}New recipe{% endif %} — PlanToPlate{% endblock %}
+
+{% block content %}
+<h1>{% if object %}Edit {{ object.name }}{% else %}New recipe{% endif %}</h1>
+
+<form method="post" class="recipe-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% include "_partials/_form_field.html" with field=form.name %}
+    {% include "_partials/_form_field.html" with field=form.description %}
+
+    <div class="field-row">
+        <div class="field {% if form.yield_quantity.errors %}has-error{% endif %}">
+            <label for="{{ form.yield_quantity.id_for_label }}">Yield <span aria-hidden="true">*</span></label>
+            {{ form.yield_quantity }}
+            {% for error in form.yield_quantity.errors %}<p class="field-errors" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if form.yield_unit.errors %}has-error{% endif %}">
+            <label for="id_yield_unit">Yield unit <span aria-hidden="true">*</span></label>
+            {% include "_partials/_unit_select.html" with units=units name="yield_unit" selected=form.yield_unit.value field_id="id_yield_unit" required=1 %}
+            {% for error in form.yield_unit.errors %}<p class="field-errors" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+    </div>
+
+    <div class="field-row">
+        {% include "_partials/_form_field.html" with field=form.prep_minutes %}
+        {% include "_partials/_form_field.html" with field=form.cook_minutes %}
+        {% include "_partials/_form_field.html" with field=form.role %}
+    </div>
+
+    <fieldset class="recipe-components">
+        <legend>Ingredients &amp; sub-recipes</legend>
+        <ul id="component-rows" class="component-editor" role="list">
+            {% for row in component_rows %}
+                {% include "recipes/_partials/_component_row.html" with row=row units=units recipe_pk=edit_recipe_pk %}
+            {% endfor %}
+        </ul>
+        <div class="component-add-controls">
+            <button type="button" class="btn"
+                    hx-get="{% url 'recipes:recipe-component-row' %}?kind=ingredient&amp;recipe={{ edit_recipe_pk }}"
+                    hx-target="#component-rows" hx-swap="beforeend">&plus; Ingredient</button>
+            <button type="button" class="btn"
+                    hx-get="{% url 'recipes:recipe-component-row' %}?kind=sub_recipe&amp;recipe={{ edit_recipe_pk }}"
+                    hx-target="#component-rows" hx-swap="beforeend">&plus; Sub-recipe</button>
+        </div>
+    </fieldset>
+
+    {% include "_partials/_form_field.html" with field=form.instructions %}
+    {% include "_partials/_form_field.html" with field=form.tags %}
+    {% include "_partials/_form_field.html" with field=form.source_url %}
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save recipe</button>
+        <a class="btn" href="{% if object %}{{ object.get_absolute_url }}{% else %}{% url 'recipes:recipe-list' %}{% endif %}">Cancel</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/recipe-editor.js' %}" defer></script>
+{% endblock %}

@@ -29,6 +29,11 @@
   The task 08 contract: flatten, aggregate, replace-generated-only, atomic, returns a summary.
   *Files:* `lists/services.py`
   *Done when:* regenerating twice leaves the list identical and manual items untouched.
+  *Provenance note (task 05 review):* `FlatLine.from_recipes` from task 05's `flatten` is the
+  **full root→leaf recipe chain** for each line, not only the recipes that directly list the
+  ingredient. Decide deliberately what list-item provenance should show (contributing
+  dish/recipe vs. full chain) rather than assuming `from_recipes` is already the direct
+  lister.
 
 - [ ] **07.6 — Merge and clear services**
   `merge_duplicate_items`, `clear_checked`.

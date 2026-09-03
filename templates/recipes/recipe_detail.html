@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ recipe.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+<article class="recipe-detail">
+    <div class="page-header">
+        <h1>{{ recipe.name }}</h1>
+        {% include "_partials/_ownership_badge.html" with object=recipe %}
+    </div>
+
+    {% include "_partials/_copied_from.html" with object=recipe %}
+
+    {% if recipe.description %}<p class="recipe-description">{{ recipe.description }}</p>{% endif %}
+
+    <dl class="detail-grid">
+        <dt>Role</dt>
+        <dd>{{ recipe.get_role_display }}</dd>
+
+        <dt>Yield</dt>
+        <dd>{{ recipe.yield_quantity|floatformat:"-2" }} {{ recipe.yield_unit.name }}</dd>
+
+        <dt>Time</dt>
+        <dd>{{ recipe.prep_minutes }} min prep + {{ recipe.cook_minutes }} min cook</dd>
+
+        <dt>Tags</dt>
+        <dd>
+            {% for tag in recipe.tags.all %}
+                <span class="badge">{{ tag.name }}</span>
+            {% empty %}
+                <span class="text-muted">None</span>
+            {% endfor %}
+        </dd>
+
+        {% if recipe.notes %}
+            <dt>Notes</dt>
+            <dd>{{ recipe.notes|linebreaksbr }}</dd>
+        {% endif %}
+    </dl>
+
+    <section class="recipe-section">
+        <div class="page-header">
+            <h2>Ingredients</h2>
+            <form class="scale-control"
+                  method="get"
+                  action="{% url 'recipes:recipe-scale' recipe.pk %}"
+                  hx-get="{% url 'recipes:recipe-scale' recipe.pk %}"
+                  hx-target="#recipe-ingredients"
+                  hx-swap="innerHTML"
+                  hx-trigger="change">
+                <label for="scale-factor">Cook for</label>
+                <select id="scale-factor" name="factor" autocomplete="off">
+                    {% for preset in scale_presets %}
+                        <option value="{{ preset }}" {% if preset == 1 %}selected{% endif %}>&times;{{ preset|floatformat:"-2" }}</option>
+                    {% endfor %}
+                </select>
+                <noscript><button type="submit" class="btn">Scale</button></noscript>
+            </form>
+        </div>
+
+        <div id="recipe-ingredients">
+            {% include "recipes/_partials/_ingredient_list.html" with components=recipe.components.all factor=1 %}
+        </div>
+    </section>
+
+    <section class="recipe-section">
+        <h2>Instructions</h2>
+        <div class="recipe-instructions">{{ recipe.instructions|linebreaksbr }}</div>
+    </section>
+
+    <section class="recipe-section recipe-stats">
+        <h2>Your notes on this recipe</h2>
+        <p class="text-muted">
+            {% if stats.times_made %}Made {{ stats.times_made }} time{{ stats.times_made|pluralize }}.{% else %}You haven't logged making this yet.{% endif %}
+        </p>
+
+        <div class="detail-actions">
+            <form method="post" action="{% url 'recipes:recipe-made' recipe.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn" hx-disabled-elt="this">I made this</button>
+            </form>
+
+            <form method="post" action="{% url 'recipes:recipe-favorite' recipe.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn" hx-disabled-elt="this">
+                    {% if stats.is_favorite %}★ Remove from favourites{% else %}☆ Add to favourites{% endif %}
+                </button>
+            </form>
+        </div>
+
+        <form method="post" action="{% url 'recipes:recipe-rate' recipe.pk %}" class="rating-form">
+            {% csrf_token %}
+            <label for="rating">Your rating</label>
+            <select id="rating" name="rating">
+                <option value="0" {% if not stats.rating %}selected{% endif %}>No rating</option>
+                {% for n in "12345"|make_list %}
+                    <option value="{{ n }}" {% if stats.rating|stringformat:"s" == n %}selected{% endif %}>{{ n }} star{{ n|pluralize }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn">Save rating</button>
+        </form>
+    </section>
+
+    <div class="detail-actions">
+        {% if is_owner %}
+            <a class="btn" href="{% url 'recipes:recipe-update' recipe.pk %}">Edit</a>
+            <a class="btn"
+               href="{% url 'recipes:recipe-share-modal' recipe.pk %}"
+               hx-get="{% url 'recipes:recipe-share-modal' recipe.pk %}"
+               hx-target="#modal"
+               hx-swap="innerHTML">Share</a>
+            <a class="btn btn-danger"
+               href="{% url 'recipes:recipe-delete' recipe.pk %}"
+               hx-get="{% url 'recipes:recipe-delete' recipe.pk %}"
+               hx-target="#modal"
+               hx-swap="innerHTML">Delete</a>
+        {% else %}
+            {% url 'recipes:recipe-copy' recipe.pk as copy_url %}
+            {% include "_partials/_copy_button.html" with object=recipe copy_url=copy_url %}
+        {% endif %}
+        <a class="btn" href="{% url 'recipes:recipe-print' recipe.pk %}">Print</a>
+    </div>
+
+    <p><a href="{% url 'recipes:recipe-list' %}">&larr; All recipes</a></p>
+</article>
+
+<div id="modal"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/recipe-detail.js' %}" defer></script>
+{% endblock %}

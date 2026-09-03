@@ -1,0 +1,63 @@
+{% comment %}
+One editable component row for the recipe form (Plan/05-Recipes/design.md, "UI": "Recipe
+form"). Rendered inside #component-rows on the form, and returned on its own by
+RecipeComponentRowView for the "+ Ingredient" / "+ Sub-recipe" buttons. A fragment — never
+extends base.html.
+
+Context:
+  row        — {kind, ref, label, quantity, unit_id, note}
+  units      — the Unit queryset for _unit_select
+  recipe_pk  — the recipe being edited (blank on the create form); threaded into the
+               sub-recipe typeahead so the server can drop cycle-creating candidates.
+
+The server reads the five parallel arrays (component_kind / component_ref /
+component_quantity / component_unit / component_note); position is the row's order on submit.
+recipe-editor.js wires the typeahead result clicks, quick-add, remove and reorder.
+{% endcomment %}
+{% load static %}
+<li class="component-edit-row" data-component-row data-kind="{{ row.kind }}">
+    <input type="hidden" name="component_kind" value="{{ row.kind }}" data-role="kind">
+    <input type="hidden" name="component_ref" value="{{ row.ref }}" data-role="ref">
+
+    <div class="component-picker">
+        <span class="component-chosen" data-role="label"
+              data-placeholder="{% if row.kind == 'sub_recipe' %}Sub-recipe{% else %}Ingredient{% endif %}">{{ row.label }}</span>
+        <input type="search" class="component-search" data-role="search" autocomplete="off"
+               name="q"
+               placeholder="{% if row.kind == 'sub_recipe' %}Search sub-recipes{% else %}Search ingredients{% endif %}"
+               aria-label="{% if row.kind == 'sub_recipe' %}Search sub-recipes{% else %}Search ingredients{% endif %}"
+               {% if row.kind == 'sub_recipe' %}
+                   hx-get="{% url 'recipes:recipe-subrecipe-options' %}"
+                   hx-vals='{"recipe": "{{ recipe_pk }}"}'
+               {% else %}
+                   hx-get="{% url 'recipes:recipe-ingredient-options' %}"
+               {% endif %}
+               hx-trigger="keyup changed delay:250ms, search"
+               hx-target="next .component-results"
+               hx-swap="innerHTML">
+        <div class="component-results" data-role="results"></div>
+    </div>
+
+    <label class="component-qty-field">
+        <span class="component-caption">Qty</span>
+        <input type="number" name="component_quantity" value="{{ row.quantity }}"
+               step="any" min="0" inputmode="decimal" placeholder="Qty">
+    </label>
+
+    <label class="component-unit-field">
+        <span class="component-caption">Unit</span>
+        {% include "_partials/_unit_select.html" with units=units name="component_unit" selected=row.unit_id required=1 %}
+    </label>
+
+    <label class="component-note-field">
+        <span class="component-caption">Note</span>
+        <input type="text" name="component_note" value="{{ row.note }}" maxlength="200"
+               placeholder="e.g. finely diced">
+    </label>
+
+    <div class="component-row-controls">
+        <button type="button" class="btn btn-icon" data-move-row="up" aria-label="Move row up">&uarr;</button>
+        <button type="button" class="btn btn-icon" data-move-row="down" aria-label="Move row down">&darr;</button>
+        <button type="button" class="btn btn-icon btn-danger" data-remove-row aria-label="Remove row">&times;</button>
+    </div>
+</li>

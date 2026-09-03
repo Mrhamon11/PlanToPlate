@@ -1,0 +1,31 @@
+{% comment %}
+Inlined ingredients of one sub-recipe, returned by RecipeComponentExpandView into the parent
+row's #subrecipe-<pk> slot (design.md, "UI": "a sub-recipe expander ... without leaving the
+page"). A fragment — never extends base.html.
+
+`sub_recipe` is None when the sub-recipe is not visible to the viewer (a share-cascade bug):
+the fragment then shows only its name, never its contents — degrade, don't 500 (design.md,
+"Edge cases").
+{% endcomment %}
+{% if sub_recipe %}
+    <ul class="component-list component-sublist" role="list">
+        {% for component in sub_recipe.components.all %}
+            <li class="component-row">
+                <span class="component-qty">{{ component.quantity|floatformat:"-3" }} {{ component.unit.name }}</span>
+                {% if component.ingredient_id %}
+                    <span class="component-name">{{ component.ingredient.name }}</span>
+                {% elif component.sub_recipe_id %}
+                    <span class="component-name">{{ component.sub_recipe.name }}</span>
+                {% endif %}
+                {% if component.note %}<span class="component-note text-muted">— {{ component.note }}</span>{% endif %}
+            </li>
+        {% empty %}
+            <li class="text-muted">No ingredients listed.</li>
+        {% endfor %}
+    </ul>
+    <p class="text-muted">
+        <a href="{% url 'recipes:recipe-detail' sub_recipe.pk %}">Open {{ sub_recipe.name }}</a>
+    </p>
+{% else %}
+    <p class="text-muted">{{ sub_recipe_name }} is not available to you.</p>
+{% endif %}

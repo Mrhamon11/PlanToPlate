@@ -452,6 +452,15 @@ button:disabled {
   min-height: var(--tap-target);
 }
 
+.btn-clear-filters {
+  align-self: flex-start;
+}
+
+.btn-clear-filters[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .tag-chips {
   display: flex;
   flex-wrap: wrap;
@@ -562,4 +571,287 @@ button:disabled {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+}
+
+/* --------------------------------------------------------------------------------------------
+   Recipes: list cards, the detail-page ingredient lines, and the scale control
+   (Plan/05-Recipes, 05.10-05.11). Layout only — colour comes from the app.css tokens.
+   ------------------------------------------------------------------------------------------ */
+
+.recipe-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+}
+
+.recipe-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.recipe-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-decoration: none;
+  color: inherit;
+}
+
+.recipe-card-main:hover .recipe-name {
+  text-decoration: underline;
+}
+
+.recipe-name {
+  font-weight: 600;
+}
+
+.recipe-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.badge-favorite {
+  background: var(--color-warning);
+  color: var(--color-text);
+}
+
+.recipe-rating {
+  letter-spacing: 0.1em;
+}
+
+.recipe-section {
+  margin-block-start: var(--space-6);
+}
+
+.recipe-instructions,
+.recipe-description {
+  max-width: 44rem;
+}
+
+.scale-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.scale-control select {
+  width: auto;
+}
+
+.component-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.component-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.component-qty {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 6rem;
+}
+
+.component-sublist {
+  margin-block-start: var(--space-2);
+  padding-inline-start: var(--space-4);
+  border-inline-start: 2px solid var(--color-border);
+}
+
+/* The inlined sub-recipe ingredients wrap onto their own line under the component row.
+   Shown / hidden by recipe-detail.js toggling the [hidden] attribute — no display rule here,
+   so the UA's [hidden] { display: none } is what wins. */
+.subrecipe-expansion {
+  flex-basis: 100%;
+}
+
+[data-subrecipe-toggle] {
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+
+.rating-form select {
+  width: auto;
+}
+
+/* --- Recipe form editor (05.12) ------------------------------------------------------- */
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.field-row > .field {
+  flex: 1 1 8rem;
+}
+
+.recipe-components {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  margin-block: var(--space-4);
+}
+
+.component-editor {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.component-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  /* align-items defaults to `stretch`: every cell below is stretched to the line's height and
+     then bottom-aligns its own input, so the inputs line up no matter how tall the caption /
+     chosen-name above them is (dev-test: the search box and row controls drifting out of
+     line). */
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+}
+
+/* Each field cell stacks [caption, input] and pins that pair to its bottom edge. */
+.component-picker,
+.component-qty-field,
+.component-unit-field,
+.component-note-field {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.component-picker {
+  position: relative;
+  flex: 1 1 12rem;
+  min-width: 0; /* let a long ingredient name ellipsis instead of stretching the row */
+}
+
+.component-qty-field {
+  flex: 0 0 5rem;
+}
+
+.component-unit-field {
+  flex: 0 1 10rem;
+}
+
+.component-note-field {
+  flex: 1 1 8rem;
+}
+
+.component-picker .component-search,
+.component-qty-field input,
+.component-unit-field select,
+.component-note-field input {
+  width: 100%;
+}
+
+.component-caption,
+.component-chosen {
+  font-size: 0.8125rem;
+  line-height: 1.2;
+}
+
+.component-caption {
+  color: var(--color-muted);
+}
+
+.component-chosen {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-chosen:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.component-row-controls {
+  display: flex;
+  gap: var(--space-1);
+  align-self: flex-end; /* level with the inputs, not stretched up past them */
+}
+
+/* The typeahead results are a dropdown, not part of the row's flow — so a chosen ingredient
+   name of any length, or an open results list, never changes where the inputs sit. */
+.component-results {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + var(--space-1));
+  z-index: 20;
+}
+
+.component-add-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+
+.typeahead-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  max-height: 14rem;
+  overflow-y: auto;
+  background: var(--color-surface-raised);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.typeahead-results:empty {
+  display: none;
+}
+
+.typeahead-option {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: var(--space-2);
+  cursor: pointer;
+}
+
+.typeahead-option:hover,
+.typeahead-option:focus {
+  background: var(--color-surface-alt, rgba(0, 0, 0, 0.05));
+}
+
+.typeahead-empty {
+  padding: var(--space-2);
 }

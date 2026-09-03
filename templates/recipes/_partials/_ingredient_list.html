@@ -1,0 +1,50 @@
+{% comment %}
+The recipe's component lines. Rendered inside #recipe-ingredients on the detail page, and
+returned on its own by RecipeScaleView when the scale control changes (design.md, "UI":
+"re-renders quantities ... persisting nothing").
+
+Context:
+  recipe                  — the Recipe
+  components               — an iterable of RecipeComponent-shaped objects. On the detail page
+                            these are the saved rows; from the scale view they are UNSAVED,
+                            quantity-multiplied copies (recipes.services.flatten.scale), so
+                            `component.pk` may be None — the sub-recipe expander is only offered
+                            for a saved row.
+  factor                  — the Decimal currently applied (1 = unscaled)
+  visible_sub_recipe_ids  — pks of sub-recipes the viewer may open; anything else degrades to
+                            a bare name (design.md, "Edge cases").
+{% endcomment %}
+<ul class="component-list" role="list">
+    {% for component in components %}
+        <li class="component-row">
+            <span class="component-qty">{{ component.quantity|floatformat:"-3" }} {{ component.unit.name }}</span>
+            {% if component.ingredient_id %}
+                <span class="component-name">{{ component.ingredient.name }}</span>
+            {% elif component.sub_recipe_id %}
+                {% if component.sub_recipe_id in visible_sub_recipe_ids %}
+                    <a class="component-name" href="{% url 'recipes:recipe-detail' component.sub_recipe_id %}">{{ component.sub_recipe.name }}</a>
+                    {% if component.pk %}
+                        <button type="button" class="btn btn-icon" data-subrecipe-toggle
+                                aria-expanded="false"
+                                hx-get="{% url 'recipes:recipe-component-expand' recipe.pk component.pk %}"
+                                hx-target="#subrecipe-{{ component.pk }}"
+                                hx-swap="innerHTML"
+                                hx-trigger="click once"
+                                aria-label="Show or hide {{ component.sub_recipe.name }} ingredients">+</button>
+                    {% endif %}
+                {% else %}
+                    <span class="component-name">{{ component.sub_recipe.name }}</span>
+                {% endif %}
+            {% endif %}
+            {% if component.note %}<span class="component-note text-muted">— {{ component.note }}</span>{% endif %}
+            {% if component.pk and component.sub_recipe_id %}
+                <div id="subrecipe-{{ component.pk }}" class="subrecipe-expansion" hidden></div>
+            {% endif %}
+        </li>
+    {% empty %}
+        <li class="text-muted">This recipe has no ingredients yet.</li>
+    {% endfor %}
+</ul>
+{% if factor and factor != 1 %}
+    <p class="text-muted">Showing quantities scaled &times;{{ factor|floatformat:"-2" }}. Nothing is saved.</p>
+{% endif %}
