@@ -67,6 +67,15 @@
   Confirm before replacing generated items when any are checked.
   *Files:* `templates/lists/_partials/_regenerate_confirm.html`
 
+- [ ] **07.13a — Light up the "Lists" home card**
+  `templates/core/_partials/_home_content.html` still renders Lists as a non-interactive
+  "Coming soon." card (all five were task-02 placeholders; 04-06 wired up their own on the way
+  through). Turn it into an `<a class="card card-link" href="/lists/">` with a one-line
+  description, matching the recipes/dishes/books cards. Update `core/tests/test_templates.py`
+  `test_home_dashboard_cards` (the "Coming soon." count drops to 1). The richer dashboard is
+  task 12 — this is just the card.
+  *Files:* `templates/core/_partials/_home_content.html`, `core/tests/test_templates.py`
+
 - [ ] **07.14 — Update the living document**
   Task 07 → AWAITING APPROVAL. Record the read-only-when-shared decision.
   *Files:* `Plan/MILESTONES.md`

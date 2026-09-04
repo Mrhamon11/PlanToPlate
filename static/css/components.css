@@ -155,6 +155,21 @@ input[type="radio"] {
   padding: var(--space-4);
 }
 
+a.card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.card-link:hover {
+  filter: brightness(0.98);
+  border-color: var(--color-accent);
+}
+
+a.card-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .card-grid {
   display: grid;
   grid-template-columns: 1fr;

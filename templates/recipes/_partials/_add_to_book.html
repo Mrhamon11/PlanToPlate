@@ -1,0 +1,33 @@
+{% comment %}
+"Add to book ▾" control on the recipe detail page (06.10 — "the path most people will
+actually use"). A <details>/<summary> dropdown so it opens and closes with zero JavaScript,
+matching the nav's overflow menu.
+
+Files the recipe into one of the current user's own books via meals:recipe-add-to-book, which
+re-checks that the recipe is visible_to the requester. `user.recipebooks` is OwnedModel's
+reverse accessor for books this user owns.
+
+Context: recipe.
+{% endcomment %}
+{% with my_books=user.recipebooks.all %}
+<details class="add-to-book nav-menu">
+    <summary class="btn" aria-haspopup="menu">Add to book &#9662;</summary>
+    <div class="nav-menu-panel" role="menu">
+        {% if my_books %}
+            <form method="post" action="{% url 'meals:recipe-add-to-book' recipe.pk %}" class="add-to-book-form">
+                {% csrf_token %}
+                <label for="add-to-book-select">Book</label>
+                <select id="add-to-book-select" name="book" required>
+                    {% for book in my_books %}
+                        <option value="{{ book.pk }}">{{ book.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn" hx-disabled-elt="this">Add</button>
+            </form>
+        {% else %}
+            <p class="text-muted">You have no recipe books yet.
+                <a href="{% url 'meals:book-create' %}">Create one</a>.</p>
+        {% endif %}
+    </div>
+</details>
+{% endwith %}

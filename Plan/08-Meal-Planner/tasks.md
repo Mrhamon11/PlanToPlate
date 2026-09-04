@@ -70,6 +70,16 @@
   A user with no dishes gets a clear explanation and a route forward, not a blank grid.
   *Files:* `templates/planner/_partials/_empty_pool.html`
 
+- [ ] **08.14a — Light up the "Planner" home card**
+  `templates/core/_partials/_home_content.html` still renders Planner as a non-interactive
+  "Coming soon." card (a task-02 placeholder; 04-07 wired up their own on the way through, 07
+  via 07.13a). Turn it into an `<a class="card card-link" href="/planner/">` with a one-line
+  description, matching the other cards. Update `core/tests/test_templates.py`
+  `test_home_dashboard_cards` (no "Coming soon." cards should remain). The richer dashboard —
+  this week's plan surfaced on the home page, active shopping list, recently viewed — is
+  task 12, which is best done right after this task lands.
+  *Files:* `templates/core/_partials/_home_content.html`, `core/tests/test_templates.py`
+
 - [ ] **08.15 — Update the living document**
   Task 08 → AWAITING APPROVAL. Resolve the `MealPlan`-vs-`List` open question recorded in
   `MILESTONES.md` §8.

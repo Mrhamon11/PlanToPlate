@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Edit {{ object.name }}{% else %}New book{% endif %} — PlanToPlate{% endblock %}
+
+{% block content %}
+<h1>{% if object %}Edit {{ object.name }}{% else %}New book{% endif %}</h1>
+
+<form method="post" class="recipe-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% include "_partials/_form_field.html" with field=form.name %}
+    {% include "_partials/_form_field.html" with field=form.description %}
+    {% include "_partials/_form_field.html" with field=form.default_ordering %}
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save book</button>
+        <a class="btn" href="{% if object %}{{ object.get_absolute_url }}{% else %}{% url 'meals:book-list' %}{% endif %}">Cancel</a>
+    </div>
+</form>
+{% endblock %}

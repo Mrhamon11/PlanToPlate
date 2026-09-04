@@ -132,3 +132,90 @@ need a full design) only when a subtask is actually picked up.
   native `<select>` can — a mouse is required to pick a result. Add ArrowUp/ArrowDown to move a
   highlight through `.component-results`, Enter to choose, Escape to dismiss, with
   `aria-activedescendant` wiring for screen readers.
+
+- [ ] **11.14 — Recipe-delete blocker handling should become a small registry**
+  *Found in:* task 06 review (NB3), `recipes/services/deletion.py`.
+  *Issue:* the delete-blocker check now does `apps.get_model("meals", "DishComponent")` — the
+  right way to dodge the `recipes` → `meals` import cycle, and documented, but it hard-codes one
+  consumer. Lists (07) and the planner (08) currently use `SET_NULL` on their `Recipe` FKs so
+  they add no blocker, but if any future model takes a `PROTECT` relation to `Recipe` this
+  function grows another lazy lookup. Replace it with a tiny registry: each app that protects a
+  `Recipe` registers a `(label, count_fn, name_fn)` blocker; the deletion service iterates the
+  registry. Pick up only when a second `PROTECT`-on-`Recipe` consumer actually lands.
+
+- [ ] **11.15 — Book-detail "add recipe" control is an unbounded `<select>`**
+  *Found in:* task 06 review (NB3, final round), `meals/views.py` (`RecipeBookDetailView`,
+  ~line 503) + `templates/meals/recipebook_detail.html`.
+  *Issue:* the view loads every recipe `visible_to` the requester into a Python list and renders
+  it as a plain `<select>` on every book-detail render. Fine at 10-20 users, but grows without
+  bound as the shared catalog does. Replace with a typeahead like the dish component form's
+  (`static/js/recipe-editor.js` pattern), keeping a no-JS fallback. Sibling of [[11.12]] /
+  [[11.13]] — pure UI, no correctness impact.
+
+- [ ] **11.16 — `DishSerializer.to_representation` double-serialises components**
+  *Found in:* task 06 review (NB4, final round), `meals/serializers.py` (~line 139).
+  *Issue:* `to_representation` calls `super().to_representation()` (which serialises *all*
+  components) and then overwrites `data["components"]` with the `visible_to`-filtered set.
+  Output is correct — no leak — just wasted work on every dish render. Filter the component
+  queryset before the nested serializer runs (e.g. override `get_attribute` on the field, or
+  build the list directly) rather than serialising then discarding.
+
+- [ ] **11.17 — Dish form re-render runs one query per submitted row**
+  *Found in:* task 06 review (NB5, final round), `meals/views.py` (`_label_for`, ~line 262).
+  *Issue:* when the dish form is re-rendered after a validation error, `_label_for` issues one
+  query per submitted component row to resolve its display label. Batch the lookups into a
+  single `visible_to` query keyed by recipe id. Minor — only hit on the validation-error path.
+
+- [ ] **11.18 — Two parallel `GraphError` hierarchies; dish/recipe detail page can 500**
+  *Found in:* task 06 post-approval cleanup (dev note), `core/services/graph.py` vs
+  `recipes/services/graph.py`.
+  *Issue:* there are two unrelated `GraphError` class hierarchies — `core.services.graph`
+  (`DepthExceededError` / `CycleError`, raised by the sharing/copy cascade `walk_dependencies`)
+  and `recipes.services.graph` (`DepthExceededError`, raised by `flatten`). The share views now
+  catch the `core` one; nothing catches the `recipes` one on the render path. `DishDetailView`
+  and the recipe detail page call `flatten(...)` in `get_context_data`, so a recipe/dish whose
+  sub-tree is past the depth cap 500s the detail page. Not reachable through the app's own write
+  paths today (the component service guards depth on write), so latent — but a pre-existing DB
+  row or a future bulk-import path could trigger it. Fix: either unify the two hierarchies or
+  guard the detail-page `flatten` call and degrade to a rendered warning. Consider a plan note
+  in `ARCHITECTURE.md` about the two hierarchies regardless.
+
+- [ ] **11.19 — A share recipient has no way to remove a shared object from their own view**
+  *Found in:* task 06 dev test (notes a & b). New sharing-model surface — task 03 territory.
+  *Issue:* when a recipe / dish / book is shared *with* a user, that user cannot get rid of it.
+  It sits in their lists forever, and if they copy it to make it their own, they then see two
+  entries with the same name (their copy plus the still-shared original — the "duplicate in the
+  dish typeahead" symptom from the task 06 test).
+  *Two parts:*
+  (a) A recipient-initiated "remove this from my view" / "decline share" action on any
+  `OwnedModel` shared with them — drops the current user from `shared_with` (or records a
+  per-user hide if a shared object should stay declinable-but-not-permanently-severed). Owner
+  is unaffected; a re-share restores it. Distinct from [[11.11]], which is the *owner* revoking.
+  (b) On copy, offer to drop the original share in the same step ("I have my own copy now —
+  stop sharing the original with me"), so the deep-copy flow doesn't leave a duplicate behind.
+  *Needs:* a design slice (does declining remove the grant outright, or set a per-user
+  `SharedObjectHide` row? how does it interact with a book/dish that transitively shared child
+  recipes?), the service work, and both API + HTMX entry points. Write it up when picked up.
+
+- [ ] **11.20 — Dish form and API disagree on a recipe repeated across two rows**
+  *Found in:* task 06 fix-cycle review (NB2), `meals/services/dishes.py` (`parse_dish_component_drafts`,
+  ~line 122).
+  *Issue:* `recipe_ids` is built as a set, so two component rows referencing the same recipe give
+  `len(recipe_ids) != len(rows)` and are rejected with the misleading message *"Every dish row
+  must reference a recipe."* The REST path (`DishSerializer._write_components`) writes the
+  duplicate rows without complaint — `DishComponent` has no unique constraint — so the two entry
+  points disagree (`CLAUDE.md` §6, "never implement the same rule twice"). Decide the rule: if a
+  recipe may legitimately appear twice in a dish (e.g. a sauce used at two servings), let both
+  paths accept it; if not, reject it explicitly on both with an accurate message. Low impact at
+  this scale.
+
+- [ ] **11.21 — Book-detail fragment endpoints are N+1 on book size**
+  *Found in:* task 06 fix-cycle review (NB3), `meals/views.py` (`_book_detail_context` /
+  `_sorted_book_entries`), consumed by `BookRemoveRecipeView`, `BookEntryMoveView`,
+  `BookOrderingView`.
+  *Issue:* after `book.refresh_from_db()` these re-render `_book_sections.html` off
+  `book.entries.all()` unprefetched, one query per entry for `entry.recipe`. Pre-existing in the
+  move/ordering views (approved in the main task-06 review); the new remove view follows the
+  same pattern. One fix closes all three: have `_book_detail_context` re-fetch the book with
+  `prefetch_related("entries__recipe")` (or take a prefetched instance). Add a query-count test
+  for the fragment endpoints. Fine at 10–20 users. Sibling of [[11.17]].

@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
@@ -119,3 +120,49 @@ class OwnedModel(models.Model):
         The default does nothing — most owned models are leaves.
         """
         return None
+
+
+class UserObjectStats(models.Model):
+    """Per-user rating / favourite / times-made for one owned object (D3 / C4).
+
+    ``RecipeStats`` and ``DishStats`` are the same model with a different foreign key — rating,
+    favourite, times-made, and the "when did I last cook this" stamp the meal planner reads.
+    Factored here (``Plan/06-Dishes-And-RecipeBooks/design.md``, "DishStats") rather than copied
+    per app: "Two copies of this model is how the third one gets written subtly differently."
+
+    A concrete subclass adds:
+
+    - the foreign key to its object (``recipe`` / ``dish``), and
+    - a ``UniqueConstraint`` on ``(user, <that key>)`` — one stats row per user per object.
+
+    Rows are created lazily (most users never rate most objects), so access goes through the
+    app's ``services.stats`` module, never direct instantiation.
+    """
+
+    #: ``%(class)s_records`` → ``user.recipestats_records`` / ``user.dishstats_records``. The
+    #: default ``%(class)ss`` would have produced the awkward ``user.recipestatss`` and
+    #: silently renamed task 05's ``user.recipe_stats``; this task settles it before the PR
+    #: merges (06.12). Nothing reads the reverse accessor today — the app's ``services.stats``
+    #: modules always query ``RecipeStats`` / ``DishStats`` directly.
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="%(class)s_records",
+    )
+    rating = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    is_favorite = models.BooleanField(default=False)
+    times_made = models.PositiveIntegerField(default=0)
+    last_made_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        abstract = True
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(rating__isnull=True) | models.Q(rating__gte=1, rating__lte=5),
+                name="%(app_label)s_%(class)s_rating_range",
+            ),
+        ]

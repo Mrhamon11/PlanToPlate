@@ -1,0 +1,35 @@
+{% comment %}
+Copy confirmation for a recipe book (06.11). Loaded via hx-get into #modal for JS users; the
+same fragment is the body of recipebook_copy_confirm.html for a no-JS fallback.
+
+Copying a book deep-copies EVERY recipe in it (design.md, "Sharing and copying") — so the
+confirmation always names the count, and warns above ~20 since it is a slow, heavy operation
+(design.md, "Edge cases"; test_large_book_copy_warns).
+
+Context: book, recipe_count, warn, copy_url, cancel_url.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="copy-book-title">
+        <h2 id="copy-book-title">Copy &ldquo;{{ book.name }}&rdquo;?</h2>
+        <p>
+            This makes your own independent copy of the book and
+            <strong>all {{ recipe_count }} recipe{{ recipe_count|pluralize }}</strong> in it.
+        </p>
+        {% if warn %}
+            <p class="alert alert-warning" role="alert">
+                That is a lot of recipes to copy — {{ recipe_count }} of them. It may take a
+                little while, and you will have {{ recipe_count }} new recipes in your
+                collection afterwards.
+            </p>
+        {% endif %}
+        <form method="post" action="{{ copy_url }}">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-primary" hx-disabled-elt="this">
+                    Copy {{ recipe_count }} recipe{{ recipe_count|pluralize }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

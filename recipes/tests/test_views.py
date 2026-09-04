@@ -11,6 +11,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
+from django.contrib.messages import get_messages
 from django.urls import reverse
 
 from core.models import Visibility
@@ -430,6 +431,33 @@ def test_share_via_html_denied_for_read_only_holder(logged_in, alice, user_facto
 
     assert response.status_code == 403
     assert not Recipe.objects.visible_to(friend).filter(pk=recipe.pk).exists()
+
+
+def test_share_via_html_degrades_when_subtree_too_deep(
+    logged_in, user_factory, make_recipe, add_sub_recipe, cup
+):
+    """A sub-recipe chain at the depth cap makes the share cascade's ``walk_dependencies`` raise
+    ``DepthExceededError`` (a ``GraphError``). The HTML path must degrade like the REST
+    ``share`` action (HTTP 400 there): redirect back with an error message, never a 500.
+    """
+    client, me = logged_in
+    friend = user_factory(username="friend")
+    chain = [
+        make_recipe(name=f"deep{i}", owner=me, visibility=Visibility.PRIVATE) for i in range(8)
+    ]
+    for parent, child in zip(chain, chain[1:], strict=False):
+        add_sub_recipe(parent, child, 1, cup)
+
+    response = client.post(
+        reverse("recipes:recipe-share", args=[chain[0].pk]),
+        {"visibility": "SHARED", "users": [friend.pk]},
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("recipes:recipe-detail", args=[chain[0].pk])
+    error_messages = [m for m in get_messages(response.wsgi_request) if m.level_tag == "error"]
+    assert error_messages, "expected an error message, not a 500"
+    assert not Recipe.objects.visible_to(friend).filter(pk=chain[0].pk).exists()
 
 
 # --- delete ---------------------------------------------------------------------------

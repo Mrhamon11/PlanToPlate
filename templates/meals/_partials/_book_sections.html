@@ -1,0 +1,71 @@
+{% comment %}
+The book's section-grouped recipe grid with the ordering selector (06.9). Rendered inside
+#book-sections on the full detail page, and returned alone by BookEntryMoveView /
+BookOrderingView after a reorder or an ordering change. A fragment.
+
+Reordering is touch-first: the up/down buttons are always present when the manual order is
+selected and the viewer owns the book — never drag-only (task 02 touch-parity rule,
+test_reorder_has_touch_buttons).
+
+`close_modal` is set only by BookRemoveRecipeView, whose response swaps this fragment into
+#book-sections after a removal made from the confirm dialog — the out-of-band empty #modal
+below dismisses that dialog in the same swap.
+{% endcomment %}
+{% if close_modal %}<div id="modal" hx-swap-oob="true"></div>{% endif %}
+<div class="book-ordering">
+    <form method="post" action="{% url 'meals:book-ordering' book.pk %}"
+          hx-post="{% url 'meals:book-ordering' book.pk %}"
+          hx-target="#book-sections" hx-swap="innerHTML" hx-trigger="change">
+        {% csrf_token %}
+        <label for="book-ordering-select">Order by</label>
+        <select id="book-ordering-select" name="ordering">
+            {% for value, label in ordering_choices %}
+                <option value="{{ value }}" {% if value == ordering %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="btn">Apply</button></noscript>
+    </form>
+</div>
+
+{% for group in sections %}
+    <section class="book-section">
+        <h3>{{ group.section|default:"Unsorted" }}</h3>
+        <ul class="recipe-list" role="list">
+            {% for entry in group.entries %}
+                <li class="recipe-card">
+                    <a class="recipe-card-main" href="{% url 'recipes:recipe-detail' entry.recipe_id %}">
+                        <span class="recipe-name">{{ entry.recipe.name }}</span>
+                        <span class="text-muted">{{ entry.recipe.get_role_display }} · {{ entry.recipe.prep_minutes|add:entry.recipe.cook_minutes }} min</span>
+                    </a>
+                    {% if is_owner %}
+                        <div class="recipe-card-meta book-entry-controls">
+                            {% if group.manual %}
+                                <button type="button" class="btn btn-icon"
+                                        aria-label="Move {{ entry.recipe.name }} up"
+                                        hx-post="{% url 'meals:book-entry-move' book.pk entry.recipe_id %}"
+                                        hx-vals='{"direction": "up"}'
+                                        hx-target="#book-sections" hx-swap="innerHTML">&uarr;</button>
+                                <button type="button" class="btn btn-icon"
+                                        aria-label="Move {{ entry.recipe.name }} down"
+                                        hx-post="{% url 'meals:book-entry-move' book.pk entry.recipe_id %}"
+                                        hx-vals='{"direction": "down"}'
+                                        hx-target="#book-sections" hx-swap="innerHTML">&darr;</button>
+                            {% endif %}
+                            <a class="btn btn-icon btn-danger"
+                               aria-label="Remove {{ entry.recipe.name }} from this book"
+                               href="{% url 'meals:book-remove-recipe-confirm' book.pk entry.recipe_id %}"
+                               hx-get="{% url 'meals:book-remove-recipe-confirm' book.pk entry.recipe_id %}"
+                               hx-target="#modal" hx-swap="innerHTML">&times;</a>
+                        </div>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+{% empty %}
+    <p class="text-muted">This book has no recipes yet.</p>
+{% endfor %}
+
+{% if hidden_entry_count %}
+    <p class="text-muted">{{ hidden_entry_count }} recipe{{ hidden_entry_count|pluralize }} in this book {{ hidden_entry_count|pluralize:"is,are" }} not shared with you.</p>
+{% endif %}

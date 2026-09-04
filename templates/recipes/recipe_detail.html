@@ -120,6 +120,7 @@
             {% include "_partials/_copy_button.html" with object=recipe copy_url=copy_url %}
         {% endif %}
         <a class="btn" href="{% url 'recipes:recipe-print' recipe.pk %}">Print</a>
+        {% include "recipes/_partials/_add_to_book.html" with recipe=recipe %}
     </div>
 
     <p><a href="{% url 'recipes:recipe-list' %}">&larr; All recipes</a></p>

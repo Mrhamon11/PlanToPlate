@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ dish.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+{% url 'meals:dish-delete' dish.pk as delete_url %}
+{% url 'meals:dish-detail' dish.pk as cancel_url %}
+{% include "_partials/_confirm_delete.html" with object_name=dish.name delete_url=delete_url cancel_url=cancel_url %}
+{% endblock %}

@@ -31,6 +31,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from catalog.models import Ingredient, Tag, Unit
 from core.mixins import HtmxTemplateMixin, OwnedObjectMixin
 from core.services.copying import copy_object
+from core.services.graph import GraphError
 from core.services.sharing import SharingError, share, unshare
 from recipes.models import Recipe, RecipeRole, RecipeStats
 from recipes.services.components import (
@@ -639,7 +640,7 @@ class RecipeShareView(LoginRequiredMixin, View):
         target_users = list(User.objects.filter(is_active=True, pk__in=user_ids))
         try:
             share(recipe, actor=request.user, users=target_users, visibility=visibility)
-        except SharingError as exc:
+        except (SharingError, GraphError) as exc:
             messages.error(request, str(exc))
             return redirect(_detail_url(recipe))
         messages.success(request, "Sharing updated.")
