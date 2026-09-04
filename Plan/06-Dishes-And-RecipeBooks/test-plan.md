@@ -119,12 +119,17 @@
 
 ## Definition of Done
 
-- [ ] Every test above exists and passes.
-- [ ] The task 05 stats suite passes unchanged after the abstract-base refactor.
-- [ ] `ruff` clean; suite green; no pending migrations.
-- [ ] Visibility validated on every nested recipe reference in both models.
-- [ ] Dish and book list endpoints have a bounded query count (round-2 N+1 finding closed).
-- [ ] `DishComponentSerializer.recipe` field queryset scoped to `visible_to` (round-2 finding).
-- [ ] Reordering works by touch without drag.
-- [ ] All three manual verifications performed and reported.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated.
+- [x] Every test above exists and passes.
+- [x] The task 05 stats suite passes unchanged after the abstract-base refactor.
+- [x] `ruff` clean; suite green; no pending migrations.
+- [x] Visibility validated on every nested recipe reference in both models.
+- [x] Dish and book list endpoints have a bounded query count (round-2 N+1 finding closed).
+- [x] `DishComponentSerializer.recipe` field queryset scoped to `visible_to` (round-2 finding).
+- [x] Reordering works by touch without drag.
+- [x] All three manual verifications performed and reported.
+- [x] Subtasks ticked; `../MILESTONES.md` updated.
+
+The manual pass was the owner's 15-category walkthrough of the running app. It found three real
+defects — the book `×` control swapping into itself, its unstyled native `hx-confirm`, and the
+empty-dish rejection contradicting `design.md` — all fixed and covered by the tests above. Four
+further observations went to `Plan/11` as 11.19–11.21.

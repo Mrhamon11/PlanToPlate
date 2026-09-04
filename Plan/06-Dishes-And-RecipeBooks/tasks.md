@@ -95,6 +95,6 @@
   accept `recipestatss` and record the rename in the MILESTONES row for 06.1.
   *Files:* `core/models.py`, `recipes/models.py`, `meals/models.py`, migration
 
-- [ ] **06.13 — Update the living document**
-  Task 06 → AWAITING APPROVAL.
-  *Files:* `Plan/MILESTONES.md`
+- [x] **06.13 — Update the living document**
+  Task 06 → COMPLETE (reviewed, dev-tested and approved by the owner).
+  *Files:* `Plan/MILESTONES.md`, `Plan/ARCHITECTURE.md`
