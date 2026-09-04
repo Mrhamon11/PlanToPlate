@@ -1,5 +1,7 @@
-"""Turn a ``PROTECT``-blocked recipe delete into a 409 that names the **parent recipes**
-(design.md, "Edge cases": "Deleting a recipe used as a sub-recipe: 409 naming the parents").
+"""Turn a ``PROTECT``-blocked recipe delete into a 409 that names what still depends on the
+recipe (``Plan/05-Recipes/design.md``, "Edge cases"; ``Plan/06-Dishes-And-RecipeBooks/
+design.md``, "Edge cases": "Deleting a recipe used in a dish: ``PROTECT`` → 409 naming the
+dishes").
 
 Shared by the REST viewset (``recipes.api``) and the HTML delete view (``recipes.views``) so
 the rule — and the carve-out that a parent the requester cannot see is *counted, never named*
@@ -8,40 +10,76 @@ the rule — and the carve-out that a parent the requester cannot see is *counte
 
 from __future__ import annotations
 
-from django.db.models import ProtectedError
+from django.apps import apps
+from django.db.models import Model, ProtectedError
 
 from core.exceptions import Conflict, conflict_from_protected_error, describe_blocking_objects
 from recipes.models import Recipe, RecipeComponent
 
 
 def conflict_for_protected_recipe(exc: ProtectedError, *, viewer) -> Conflict:
-    """The 409 for ``exc`` raised while deleting a recipe. If every blocker is a
-    ``RecipeComponent`` (the recipe is someone's sub-recipe) the message names the parent
-    recipes; any other ``PROTECT``ed relation falls back to the generic handler.
+    """The 409 for ``exc`` raised while deleting a recipe.
+
+    ``RecipeComponent`` blockers mean the recipe is someone's sub-recipe; ``DishComponent``
+    blockers mean it is part of a dish. The message names the parents the ``viewer`` can see
+    and counts the rest. Any other ``PROTECT``ed relation falls back to the generic handler.
     """
+    dish_component = apps.get_model("meals", "DishComponent")
+    dish_model = apps.get_model("meals", "Dish")
+
     blockers = list(exc.protected_objects)
-    components = [obj for obj in blockers if isinstance(obj, RecipeComponent)]
-    if len(components) != len(blockers):
+    sub_recipe_blockers = [obj for obj in blockers if isinstance(obj, RecipeComponent)]
+    dish_blockers = [obj for obj in blockers if isinstance(obj, dish_component)]
+    if len(sub_recipe_blockers) + len(dish_blockers) != len(blockers):
         return conflict_from_protected_error(exc)
-    return Conflict(_subrecipe_conflict_detail(components, viewer=viewer))
+
+    clauses: list[str] = []
+    if sub_recipe_blockers:
+        parents = _describe_parents(
+            {obj.recipe_id for obj in sub_recipe_blockers},
+            model=Recipe,
+            viewer=viewer,
+            noun="recipe",
+        )
+        clauses.append(f"used as a sub-recipe in: {parents}")
+    if dish_blockers:
+        dish_ids = {obj.dish_id for obj in dish_blockers}
+        parents = _describe_parents(
+            dish_ids,
+            model=dish_model,
+            viewer=viewer,
+            noun="dish",
+            plural="dishes",
+        )
+        label = "dish" if len(dish_ids) == 1 else "dishes"
+        clauses.append(f"part of the {label}: {parents}")
+
+    detail = (
+        f"Cannot delete this recipe — it is {'; and it is '.join(clauses)}. "
+        "Remove those references first."
+    )
+    return Conflict(detail)
 
 
-def _subrecipe_conflict_detail(components: list[RecipeComponent], *, viewer) -> str:
-    """One ``visible_to`` query covers every parent; ``component.recipe`` is never dereferenced
-    (that would be a query per join row), and a parent ``viewer`` cannot see is counted only —
-    the body must not leak another user's recipe name (task 05 review).
+def _describe_parents(
+    parent_ids: set[object],
+    *,
+    model: type[Model],
+    viewer,
+    noun: str,
+    plural: str | None = None,
+) -> str:
+    """Name the parents ``viewer`` can see, count the ones they cannot. One ``visible_to``
+    query covers them all; a parent the viewer cannot see is counted only — the body must not
+    leak another user's name (task 05 review).
     """
-    parent_ids = {component.recipe_id for component in components}
-    visible = list(Recipe.objects.visible_to(viewer).filter(pk__in=parent_ids))
+    plural = plural or f"{noun}s"
+    visible = list(model.objects.visible_to(viewer).filter(pk__in=parent_ids))
     hidden = len(parent_ids) - len(visible)
 
     parts: list[str] = []
     if visible:
         parts.append(describe_blocking_objects(visible))
     if hidden:
-        parts.append(f"{hidden} other recipe{'' if hidden == 1 else 's'}")
-    used_in = " and ".join(parts) if parts else "other recipes"
-    return (
-        f"Cannot delete this recipe — it is used as a sub-recipe in: {used_in}. "
-        "Remove it from those recipes first."
-    )
+        parts.append(f"{hidden} other {noun if hidden == 1 else plural}")
+    return " and ".join(parts) if parts else f"other {plural}"

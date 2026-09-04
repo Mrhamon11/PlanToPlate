@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dish.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+<article class="recipe-detail">
+    <div class="page-header">
+        <h1>{{ dish.name }}</h1>
+        {% include "_partials/_ownership_badge.html" with object=dish %}
+    </div>
+
+    {% include "_partials/_copied_from.html" with object=dish %}
+
+    {% if dish.description %}<p class="recipe-description">{{ dish.description }}</p>{% endif %}
+
+    <dl class="detail-grid">
+        <dt>Approx. total time</dt>
+        <dd>~{{ total_minutes }} min <span class="text-muted">(longest prep + all cook times)</span></dd>
+
+        <dt>Roles</dt>
+        <dd>
+            {% for role in roles %}<span class="badge">{{ role }}</span>{% empty %}<span class="text-muted">None</span>{% endfor %}
+        </dd>
+
+        <dt>Tags</dt>
+        <dd>
+            {% for tag in dish.tags.all %}<span class="badge">{{ tag.name }}</span>{% empty %}<span class="text-muted">None</span>{% endfor %}
+        </dd>
+
+        {% if dish.notes %}<dt>Notes</dt><dd>{{ dish.notes|linebreaksbr }}</dd>{% endif %}
+    </dl>
+
+    <section class="recipe-section">
+        <h2>Recipes in this dish</h2>
+        <ul class="component-list" role="list">
+            {% for component in components %}
+                <li class="component-row">
+                    <span class="component-qty">&times;{{ component.servings|floatformat:"-2" }}</span>
+                    <a class="component-name" href="{% url 'recipes:recipe-detail' component.recipe_id %}">{{ component.recipe.name }}</a>
+                    <span class="component-note text-muted">— {{ component.recipe.get_role_display }}</span>
+                </li>
+            {% empty %}
+                <li class="text-muted">This dish has no recipes yet.</li>
+            {% endfor %}
+        </ul>
+        {% if hidden_component_count %}
+            <p class="text-muted">{{ hidden_component_count }} recipe{{ hidden_component_count|pluralize }} in this dish {{ hidden_component_count|pluralize:"is,are" }} not shared with you.</p>
+        {% endif %}
+    </section>
+
+    <section class="recipe-section">
+        <h2>Combined ingredients</h2>
+        <p class="text-muted">Every recipe's ingredients, scaled by its servings and added together. Approximate.</p>
+        <ul class="component-list" role="list">
+            {% for line in combined_ingredients %}
+                <li class="component-row">
+                    <span class="component-qty">{{ line.quantity|floatformat:"-3" }} {{ line.unit.abbrev }}</span>
+                    <span class="component-name">{{ line.ingredient.name }}</span>
+                    {% if line.from_recipes %}<span class="component-note text-muted">— from {{ line.from_recipes|join:", " }}</span>{% endif %}
+                </li>
+            {% empty %}
+                <li class="text-muted">Nothing to combine yet — add recipes with ingredients.</li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <section class="recipe-section recipe-stats">
+        <h2>Your notes on this dish</h2>
+        <p class="text-muted">
+            {% if stats.times_made %}Made {{ stats.times_made }} time{{ stats.times_made|pluralize }}.{% else %}You haven't logged making this yet.{% endif %}
+        </p>
+
+        <div class="detail-actions">
+            <form method="post" action="{% url 'meals:dish-made' dish.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn" hx-disabled-elt="this">I made this</button>
+            </form>
+            <form method="post" action="{% url 'meals:dish-favorite' dish.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn" hx-disabled-elt="this">
+                    {% if stats.is_favorite %}★ Remove from favourites{% else %}☆ Add to favourites{% endif %}
+                </button>
+            </form>
+        </div>
+
+        <form method="post" action="{% url 'meals:dish-rate' dish.pk %}" class="rating-form">
+            {% csrf_token %}
+            <label for="rating">Your rating</label>
+            <select id="rating" name="rating">
+                <option value="0" {% if not stats.rating %}selected{% endif %}>No rating</option>
+                {% for n in "12345"|make_list %}
+                    <option value="{{ n }}" {% if stats.rating|stringformat:"s" == n %}selected{% endif %}>{{ n }} star{{ n|pluralize }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn">Save rating</button>
+        </form>
+    </section>
+
+    <div class="detail-actions">
+        {% if is_owner %}
+            <a class="btn" href="{% url 'meals:dish-update' dish.pk %}">Edit</a>
+            <a class="btn"
+               href="{% url 'meals:dish-share-modal' dish.pk %}"
+               hx-get="{% url 'meals:dish-share-modal' dish.pk %}"
+               hx-target="#modal" hx-swap="innerHTML">Share</a>
+            <a class="btn btn-danger" href="{% url 'meals:dish-delete' dish.pk %}">Delete</a>
+        {% else %}
+            {% url 'meals:dish-copy' dish.pk as copy_url %}
+            {% include "_partials/_copy_button.html" with object=dish copy_url=copy_url %}
+        {% endif %}
+    </div>
+
+    <p><a href="{% url 'meals:dish-list' %}">&larr; All dishes</a></p>
+</article>
+
+<div id="modal"></div>
+{% endblock %}

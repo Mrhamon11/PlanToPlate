@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block title %}Remove {{ recipe.name }} from {{ book.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+{% include "meals/_partials/_remove_from_book_confirm.html" %}
+{% endblock %}

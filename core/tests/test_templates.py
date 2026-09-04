@@ -59,6 +59,22 @@ def test_home_requires_login(client):
     assert response.url.startswith(reverse("accounts:login"))
 
 
+def test_home_dashboard_cards(client, user_factory):
+    """The sections that exist (recipes, dishes, books — tasks 04-06) are real links on the
+    home dashboard; lists and planner (07-08) are still non-interactive "Coming soon." cards.
+    """
+    client.force_login(user_factory())
+
+    content = client.get(reverse("core:home")).content.decode()
+
+    for path in ("/recipes/", "/dishes/", "/books/"):
+        assert f'href="{path}"' in content
+    assert content.count("Coming soon.") == 2
+    # The live sections must not be dressed as "coming soon"
+    coming_soon_block = content.split("Lists")[-1]
+    assert "Recipes" not in coming_soon_block and "Dishes" not in coming_soon_block
+
+
 def test_auth_screens_render_as_complete_documents(client, user_factory):
     """login.html, password_change.html and profile.html all extend base.html, but nothing
     proved any of them renders as a complete document via the plain test client the way

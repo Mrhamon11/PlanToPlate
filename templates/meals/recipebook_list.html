@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Recipe books — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Recipe books</h1>
+    <a class="btn btn-primary" href="{% url 'meals:book-create' %}">New book</a>
+</div>
+
+<form class="ingredient-filters"
+      method="get"
+      action="{% url 'meals:book-list' %}"
+      hx-get="{% url 'meals:book-list' %}"
+      hx-target="#book-results"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      hx-trigger="submit, keyup changed delay:300ms from:input[name='search']">
+    <div class="field">
+        <label for="book-search">Search</label>
+        <input type="search" id="book-search" name="search"
+               value="{{ search }}" placeholder="Search books" autocomplete="off">
+    </div>
+    <noscript><button type="submit" class="btn">Apply</button></noscript>
+</form>
+
+<div id="book-results">
+    {% include "meals/_partials/_recipebook_results.html" %}
+</div>
+{% endblock %}

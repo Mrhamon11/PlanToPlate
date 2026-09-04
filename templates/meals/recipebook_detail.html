@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{{ book.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+<article class="recipe-detail">
+    <div class="page-header">
+        <h1>{{ book.name }}</h1>
+        {% include "_partials/_ownership_badge.html" with object=book %}
+    </div>
+
+    {% include "_partials/_copied_from.html" with object=book %}
+
+    {% if book.description %}<p class="recipe-description">{{ book.description }}</p>{% endif %}
+    <p class="text-muted">{{ recipe_count }} recipe{{ recipe_count|pluralize }}.</p>
+
+    {% if is_owner %}
+        <section class="recipe-section">
+            <h2>Add a recipe</h2>
+            {% if addable_recipes %}
+                <form method="post" action="{% url 'meals:book-add-recipe' book.pk %}" class="rating-form">
+                    {% csrf_token %}
+                    <label for="add-recipe">Recipe</label>
+                    <select id="add-recipe" name="recipe" required>
+                        {% for recipe in addable_recipes %}
+                            <option value="{{ recipe.pk }}">{{ recipe.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="add-section">Section</label>
+                    <input type="text" id="add-section" name="section" list="book-sections-list"
+                           placeholder="Optional — e.g. Weeknight" maxlength="100">
+                    <datalist id="book-sections-list">
+                        {% for section in sections_in_use %}<option value="{{ section }}"></option>{% endfor %}
+                    </datalist>
+                    <button type="submit" class="btn">Add to book</button>
+                </form>
+            {% else %}
+                <p class="text-muted">Every recipe you can see is already in this book.</p>
+            {% endif %}
+        </section>
+    {% endif %}
+
+    <section class="recipe-section">
+        <h2>Recipes</h2>
+        <div id="book-sections">
+            {% include "meals/_partials/_book_sections.html" %}
+        </div>
+    </section>
+
+    <div class="detail-actions">
+        {% if is_owner %}
+            <a class="btn" href="{% url 'meals:book-update' book.pk %}">Edit</a>
+            <a class="btn"
+               href="{% url 'meals:book-share-modal' book.pk %}"
+               hx-get="{% url 'meals:book-share-modal' book.pk %}"
+               hx-target="#modal" hx-swap="innerHTML">Share</a>
+            <a class="btn btn-danger" href="{% url 'meals:book-delete' book.pk %}">Delete</a>
+        {% endif %}
+        {% if not is_owner %}
+            <a class="btn"
+               href="{% url 'meals:book-copy-confirm' book.pk %}"
+               hx-get="{% url 'meals:book-copy-confirm' book.pk %}"
+               hx-target="#modal" hx-swap="innerHTML">Copy to my books</a>
+        {% endif %}
+    </div>
+
+    <p><a href="{% url 'meals:book-list' %}">&larr; All books</a></p>
+</article>
+
+<div id="modal"></div>
+{% endblock %}

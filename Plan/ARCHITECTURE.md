@@ -162,8 +162,10 @@ RecipeComponent
     ingredient → Ingredient?  XOR  sub_recipe → Recipe?    # DB CHECK: exactly one
     quantity: Decimal, unit → Unit, note
 
-Dish(OwnedModel)          ── DishComponent(dish, recipe, position)
+Dish(OwnedModel)          ── DishComponent(dish, recipe, servings: Decimal, position)
+    name, description, tags M2M(Tag)                  # servings = that recipe's scale factor
 RecipeBook(OwnedModel)    ── RecipeBookEntry(book, recipe, section, position)
+    name, description, default_ordering               # section is free text, per book
 
 List(OwnedModel)
     kind: SHOPPING | MEAL_PLAN | MENU | GENERIC
@@ -179,8 +181,11 @@ MealPlan(OwnedModel)
     start_date, days, profile → MealPlanProfile, seed: int, shopping_list → List
 MealPlanEntry(plan, day_index, slot: BREAKFAST | LUNCH | DINNER, dish)
 
-RecipeStats(user, recipe, rating 0–5, is_favorite, times_made, last_made_at)  # unique together
-DishStats(user, dish, rating 0–5, is_favorite, times_made, last_made_at)      # unique together
+UserObjectStats(abstract)   # core/models.py — the shared per-user stats shape (D38)
+    user, rating 0–5, is_favorite, times_made, last_made_at
+
+RecipeStats(UserObjectStats)  recipe   # unique (user, recipe)
+DishStats(UserObjectStats)    dish     # unique (user, dish)
 ```
 
 ### The visibility keystone — the most security-critical convention in the codebase
@@ -336,6 +341,8 @@ remains is what a future session needs to respect.
 | D35 | **`shared_with` is owner-only on read.** The share audience is itself sensitive (task 03 `design.md`: "the audience list is itself sensitive"), and the `/shares/` action already gates it to the owner. `OwnedSerializer.shared_with` is therefore a `SerializerMethodField` returning the audience only when `request.user` owns the object and `[]` for everyone else (a read-only holder, any viewer of a PUBLIC object). Every downstream owned resource inherits this. `core/README.md`'s "list it in `Meta.fields` if you want it in the response" still holds — the field stays in the response for all readers, it just carries `[]` for non-owners rather than leaking the list. First enforced on `Ingredient` (task 04). |
 | D37 | **A deep copy reuses a child the actor has already copied, rather than copying it again.** Task 03's plan said copy-dedup was out of scope; task 05's dev test found this is not optional for `Ingredient` — its `(owner, name)` uniqueness makes a second copy unstorable, so copying two recipes that share a private ingredient (or re-copying one recipe) raised `IntegrityError`. `recipes.models._copy_or_reference` now resolves a child to an existing copy the actor owns — matched on `copied_from`, then (for `Ingredient` only) on name — before falling back to `Copier.copy`. Trade-off: a re-copied sub-tree is **shared** with the earlier copy, not duplicated. `Copier.actor` is exposed for this. Any future `OwnedModel` with a `copy_children` hook and a per-owner uniqueness constraint must apply the same rule. |
 | D36 | **`Recipe.role` has 9 values, not 7.** Task 05's `design.md` lists `PROTEIN / CARB / VEGETABLE / ONE_POT / SAUCE / DESSERT / SIDE / BREAKFAST / OTHER`; §4 above originally carried only the first six plus `OTHER`. `SIDE` and `BREAKFAST` are real planner categories (a side dish is not a `VEGETABLE`; breakfast recipes must be selectable for the planner's optional breakfast slot, §5 gear 1) and the implementation follows `design.md`. `default=OTHER`, `db_index=True`. Adding a tenth role is a decision to record here, like the planner's eight gears. |
+| D38 | **Per-user stats live on the abstract `core.UserObjectStats` base, and its `user` FK uses `related_name="%(class)s_records"`.** `RecipeStats` and `DishStats` are the same model with a different foreign key; task 06 factored the shape out rather than copying it, because "two copies of this model is how the third one gets written subtly differently." A concrete subclass adds only its object FK and a `UniqueConstraint` on `(user, <that key>)`. The `related_name` is deliberate: Django's default `%(class)ss` yields the awkward `user.recipestatss` **and** silently renames task 05's `user.recipe_stats`, so the base was given a clean name inside task 06's own migration (`recipes/0003_alter_recipestats_user`) rather than costing a second one post-merge. Nothing reads the reverse accessor today — every `services.stats` module queries the concrete model — so any future reader gets `user.recipestats_records` / `user.dishstats_records`. A third per-user stats model subclasses the base; it does not copy it. |
+| D39 | **No `hx-confirm` anywhere.** It calls `window.confirm()`, which renders the browser's native dialog — unstyled, and prefixed with "localhost:8000 says" in Chrome. Task 06's dev test caught the one instance in the codebase (removing a recipe from a book). Every destructive confirmation goes through a real page or the shared `#modal` fragment instead, the pattern `_copy_book_confirm.html` / `recipebook_copy_confirm.html` already established: a GET renders the confirm into `#modal`, its form POSTs with an explicit `hx-target`, and the response clears `#modal` via `hx-swap-oob`. The same episode is the reason for the corollary: **an HTMX control that swaps something other than itself must name an `hx-target`.** HTMX's default target is the triggering element, so an `hx-post` without one injects the whole re-rendered fragment into the button that fired it — which looks correct until you stop reloading the page. |
 
 ### Corrections to the original requirements
 

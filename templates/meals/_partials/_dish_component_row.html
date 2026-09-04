@@ -1,0 +1,35 @@
+{% comment %}
+One editable recipe row for the dish form (06.8). Rendered inside #component-rows on the form,
+and returned on its own by DishComponentRowView for the "+ Recipe" button. A fragment.
+
+Reuses static/js/recipe-editor.js: the row exposes the same data hooks that script delegates on
+(data-component-row, [data-role="ref"/"label"/"search"/"results"], [data-choose], [data-move-row],
+[data-remove-row]). The server reads the parallel arrays component_recipe / component_servings;
+row order on submit becomes the component's position.
+{% endcomment %}
+<li class="component-edit-row" data-component-row>
+    <input type="hidden" name="component_recipe" value="{{ row.ref }}" data-role="ref">
+
+    <div class="component-picker">
+        <span class="component-chosen" data-role="label" data-placeholder="Recipe">{{ row.label }}</span>
+        <input type="search" class="component-search" data-role="search" autocomplete="off"
+               name="q" placeholder="Search recipes" aria-label="Search recipes"
+               hx-get="{% url 'meals:dish-recipe-options' %}"
+               hx-trigger="keyup changed delay:250ms, search"
+               hx-target="next .component-results"
+               hx-swap="innerHTML">
+        <div class="component-results" data-role="results"></div>
+    </div>
+
+    <label class="component-qty-field">
+        <span class="component-caption">Servings (&times;)</span>
+        <input type="number" name="component_servings" value="{{ row.servings|default:'1' }}"
+               step="any" min="0" inputmode="decimal" placeholder="1">
+    </label>
+
+    <div class="component-row-controls">
+        <button type="button" class="btn btn-icon" data-move-row="up" aria-label="Move recipe up">&uarr;</button>
+        <button type="button" class="btn btn-icon" data-move-row="down" aria-label="Move recipe down">&darr;</button>
+        <button type="button" class="btn btn-icon btn-danger" data-remove-row aria-label="Remove recipe">&times;</button>
+    </div>
+</li>

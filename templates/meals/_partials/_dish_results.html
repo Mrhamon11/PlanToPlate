@@ -1,0 +1,49 @@
+{% comment %}
+Swappable results region for the dish list (06.8). Rendered inside #dish-results on a full
+page load, returned on its own for an htmx filter request. A fragment — never extends
+base.html.
+{% endcomment %}
+{% if dishes %}
+    <ul class="recipe-list" role="list">
+        {% for dish in dishes %}
+            <li class="recipe-card">
+                <a class="recipe-card-main" href="{% url 'meals:dish-detail' dish.pk %}">
+                    <span class="recipe-name">{{ dish.name }}</span>
+                    <span class="text-muted">
+                        {% for recipe in dish.display_recipes %}
+                            {{ recipe.name }}{% if not forloop.last %} · {% endif %}
+                        {% empty %}No recipes yet{% endfor %}
+                    </span>
+                </a>
+                <div class="recipe-card-meta">
+                    {% include "_partials/_ownership_badge.html" with object=dish %}
+                    <span class="badge">~{{ dish.display_minutes }} min</span>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+
+    {% if page_obj.has_other_pages %}
+        <nav class="pagination" aria-label="Pagination">
+            <ul role="list">
+                {% if page_obj.has_previous %}
+                    <li>
+                        <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
+                           hx-get="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
+                           hx-target="#dish-results" hx-swap="innerHTML" hx-push-url="true">Previous</a>
+                    </li>
+                {% endif %}
+                <li aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</li>
+                {% if page_obj.has_next %}
+                    <li>
+                        <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
+                           hx-get="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
+                           hx-target="#dish-results" hx-swap="innerHTML" hx-push-url="true">Next</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
+{% else %}
+    {% include "_partials/_empty_state.html" with title="No dishes found" message="Build a dish from a few recipes, or clear the filters." action_url="/dishes/new/" action_label="New dish" %}
+{% endif %}

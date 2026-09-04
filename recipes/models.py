@@ -11,13 +11,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from catalog.models import Ingredient, Tag, Unit
-from core.models import OwnedModel
+from core.models import OwnedModel, UserObjectStats
 from recipes.managers import RecipeManager
 
 if TYPE_CHECKING:
@@ -228,38 +226,24 @@ class RecipeComponent(models.Model):
         return f"{self.quantity} {self.unit} {target}"
 
 
-class RecipeStats(models.Model):
+class RecipeStats(UserObjectStats):
     """Per-user rating / favourite / times-made for one recipe (D3 / C4).
 
-    Rows are created lazily — most users never rate most recipes — so access goes through
-    ``recipes.services.stats``, not direct instantiation. ``last_made_at`` is what the meal
-    planner's ``no_repeat_days`` gear reads.
+    The shared shape lives in ``core.models.UserObjectStats``; this subclass only adds the
+    ``recipe`` foreign key and the ``(user, recipe)`` uniqueness rule. Rows are created lazily —
+    most users never rate most recipes — so access goes through ``recipes.services.stats``, not
+    direct instantiation. ``last_made_at`` is what the meal planner's ``no_repeat_days`` gear
+    reads.
     """
 
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="recipe_stats",
-    )
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="stats")
-    rating = models.PositiveSmallIntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(1), MaxValueValidator(5)],
-    )
-    is_favorite = models.BooleanField(default=False)
-    times_made = models.PositiveIntegerField(default=0)
-    last_made_at = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
+    class Meta(UserObjectStats.Meta):
         constraints = [
+            *UserObjectStats.Meta.constraints,
             models.UniqueConstraint(
                 fields=["user", "recipe"],
                 name="recipes_recipestats_unique_user_recipe",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(rating__isnull=True) | models.Q(rating__gte=1, rating__lte=5),
-                name="recipes_recipestats_rating_range",
             ),
         ]
 

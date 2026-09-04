@@ -1,0 +1,40 @@
+{% comment %}
+Shelf-style list of recipe books (06.9). A fragment — rendered inside #book-results on a full
+load, returned alone for an htmx search.
+{% endcomment %}
+{% if books %}
+    <ul class="recipe-list book-shelf" role="list">
+        {% for book in books %}
+            <li class="recipe-card book-spine">
+                <a class="recipe-card-main" href="{% url 'meals:book-detail' book.pk %}">
+                    <span class="recipe-name">{{ book.name }}</span>
+                    {% if book.description %}<span class="text-muted">{{ book.description|truncatewords:20 }}</span>{% endif %}
+                </a>
+                <div class="recipe-card-meta">
+                    {% include "_partials/_ownership_badge.html" with object=book %}
+                    <span class="badge">{{ book.entries.count }} recipe{{ book.entries.count|pluralize }}</span>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+
+    {% if page_obj.has_other_pages %}
+        <nav class="pagination" aria-label="Pagination">
+            <ul role="list">
+                {% if page_obj.has_previous %}
+                    <li><a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
+                           hx-get="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
+                           hx-target="#book-results" hx-swap="innerHTML" hx-push-url="true">Previous</a></li>
+                {% endif %}
+                <li aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</li>
+                {% if page_obj.has_next %}
+                    <li><a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
+                           hx-get="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
+                           hx-target="#book-results" hx-swap="innerHTML" hx-push-url="true">Next</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
+{% else %}
+    {% include "_partials/_empty_state.html" with title="No books yet" message="Group your recipes into a book — by cuisine, by season, however you like." action_url="/books/new/" action_label="New book" %}
+{% endif %}

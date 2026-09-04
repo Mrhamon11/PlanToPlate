@@ -1,0 +1,20 @@
+{% comment %}
+Recipe typeahead results for the dish form (06.8). A fragment. The list is already filtered
+through .visible_to(request.user) in meals.services.dishes.recipe_choices — an invisible
+recipe's name never reaches here (test_recipe_typeahead_filtered). recipe-editor.js reads
+data-choose / data-ref / data-label to fill the row.
+{% endcomment %}
+<ul class="typeahead-results" role="listbox">
+    {% for recipe in recipes %}
+        <li role="option">
+            <button type="button" class="typeahead-option" data-choose
+                    data-ref="{{ recipe.pk }}"
+                    data-label="{{ recipe.name }}">
+                <span class="typeahead-name">{{ recipe.name }}</span>
+                <span class="text-muted">{{ recipe.get_role_display }}</span>
+            </button>
+        </li>
+    {% empty %}
+        <li class="text-muted typeahead-empty">No matching recipes.</li>
+    {% endfor %}
+</ul>

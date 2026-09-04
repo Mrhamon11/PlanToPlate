@@ -1,0 +1,31 @@
+{% comment %}
+Confirm removing one recipe from a recipe book (Fix 06.x). Loaded via hx-get into #modal for
+JS users; the same fragment is the body of recipebook_remove_confirm.html for the no-JS
+fallback. Mirrors _copy_book_confirm.html.
+
+The submit posts to BookRemoveRecipeView (meals:book-remove-recipe) — for JS users as an
+hx-post that swaps the re-rendered #book-sections list and, out of band, clears #modal; for
+no-JS users as a plain form POST that redirects back to the book.
+
+Context: book, recipe, remove_url, cancel_url.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="remove-from-book-title">
+        <h2 id="remove-from-book-title">Remove &ldquo;{{ recipe.name }}&rdquo;?</h2>
+        <p>
+            This takes <strong>{{ recipe.name }}</strong> out of
+            &ldquo;{{ book.name }}&rdquo;. The recipe itself is not deleted, and it stays in
+            any other book it is filed in.
+        </p>
+        <form method="post" action="{{ remove_url }}"
+              hx-post="{{ remove_url }}" hx-target="#book-sections" hx-swap="innerHTML">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-danger" hx-disabled-elt="this">
+                    Remove from book
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
