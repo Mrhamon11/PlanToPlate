@@ -1087,3 +1087,118 @@ button:disabled {
   gap: var(--space-1);
   margin: 0;
 }
+
+/* --- Meal planner: week grid + slot cards (08.12) ---
+   Mobile-first: one column (days stack vertically). At 48rem the grid becomes a
+   multi-column track so a week reads across on desktop (design.md, "Plan grid":
+   "Desktop shows a week grid; mobile stacks vertically"). */
+.plan-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-block: var(--space-4);
+  padding: 0;
+}
+
+@media (min-width: 48rem) {
+  .plan-grid {
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    align-items: start;
+  }
+}
+
+.plan-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.plan-day-head {
+  font-size: 1rem;
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.plan-day-date {
+  font-weight: 400;
+  color: var(--color-text-muted, inherit);
+}
+
+.slot-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.slot-card--empty {
+  border-style: dashed;
+}
+
+.slot-card--locked {
+  border-color: var(--color-accent);
+}
+
+.slot-card-slot {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.slot-card-dish {
+  margin: 0;
+  font-weight: 600;
+}
+
+.slot-card-unfilled {
+  font-weight: 400;
+  font-style: italic;
+}
+
+.slot-card-reason,
+.slot-card-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.slot-card-tag {
+  margin: 0;
+  font-size: 0.75rem;
+  align-self: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0 var(--space-1);
+}
+
+.slot-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.slot-card-actions form {
+  margin: 0;
+}
+
+.plan-grid + .plan-preview-save,
+.plan-preview-save {
+  margin-top: var(--space-4);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.mt-4 {
+  margin-top: var(--space-4);
+}

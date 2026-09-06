@@ -251,4 +251,6 @@ def test_pool_query_count(
         assert len(build_candidate_pool(alice, profile)) == 12
 
     assert len(large.captured_queries) == len(small.captured_queries)
-    assert len(small.captured_queries) < 30
+    # The equality above is the real N+1 guard; this cap (observed: 10) just keeps the
+    # absolute count from drifting up unnoticed.
+    assert len(small.captured_queries) <= 14

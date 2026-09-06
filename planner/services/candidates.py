@@ -173,13 +173,18 @@ def _flattened_ingredient_ids(dish: Dish, recipe_graph: dict[int, Recipe]) -> se
     for component in dish.components.all():
         recipe = recipe_graph.get(component.recipe_id)
         if recipe is not None:
-            _collect_recipe_ingredient_ids(recipe, ids, seen=frozenset(), depth=0)
+            collect_recipe_ingredient_ids(recipe, ids, seen=frozenset(), depth=0)
     return ids
 
 
-def _collect_recipe_ingredient_ids(
+def collect_recipe_ingredient_ids(
     recipe: Recipe, ids: set[int], *, seen: frozenset[int], depth: int
 ) -> None:
+    """Accumulate into ``ids`` every ingredient id reachable from ``recipe``, walking its
+    sub-recipe graph with the same cycle guard and ``MAX_DEPTH`` cap as
+    ``recipes.services.flatten``. Shared by the dish candidate pool and recipe composition
+    (both peers under ``planner/services/``).
+    """
     if recipe.pk in seen or depth > MAX_DEPTH:
         return
     seen = seen | {recipe.pk}
@@ -187,7 +192,7 @@ def _collect_recipe_ingredient_ids(
         if component.ingredient_id:
             ids.add(component.ingredient_id)
         elif component.sub_recipe_id:
-            _collect_recipe_ingredient_ids(component.sub_recipe, ids, seen=seen, depth=depth + 1)
+            collect_recipe_ingredient_ids(component.sub_recipe, ids, seen=seen, depth=depth + 1)
 
 
-__all__ = ["build_candidate_pool", "explain_empty_pool"]
+__all__ = ["build_candidate_pool", "collect_recipe_ingredient_ids", "explain_empty_pool"]

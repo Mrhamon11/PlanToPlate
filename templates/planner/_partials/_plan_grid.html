@@ -1,0 +1,21 @@
+{% comment %}
+The week grid — one column per day on desktop, stacked vertically on mobile (the `.plan-grid`
+rule in components.css is mobile-first: a single column until 48rem, then a multi-column
+track). Each day holds one `_slot_card.html` per meal slot, in chronological order.
+
+Context: rows (from planner.views._grid_rows), plan (None for a preview), is_owner, mode
+("preview" / "saved"), my_dishes.
+{% endcomment %}
+<div class="plan-grid" role="list">
+    {% for row in rows %}
+        <section class="plan-day" role="listitem" aria-label="Day {{ row.day_index|add:1 }}">
+            <h2 class="plan-day-head">
+                Day {{ row.day_index|add:1 }}
+                {% if row.date %}<span class="plan-day-date">{{ row.date|date:"D j M" }}</span>{% endif %}
+            </h2>
+            {% for cell in row.cells %}
+                {% include "planner/_partials/_slot_card.html" %}
+            {% endfor %}
+        </section>
+    {% endfor %}
+</div>

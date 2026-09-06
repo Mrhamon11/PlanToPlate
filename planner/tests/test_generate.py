@@ -15,7 +15,12 @@ import time
 import pytest
 
 from planner.models import MealPlanEntry
-from planner.services.generate import MAX_BACKTRACKS, generate_plan
+from planner.services.generate import (
+    MAX_BACKTRACKS,
+    PlannerError,
+    generate_plan,
+    regenerate_plan,
+)
 from recipes.models import RecipeRole
 
 pytestmark = pytest.mark.django_db
@@ -177,9 +182,7 @@ def test_mix_template_varies(make_balanced_dish, make_pool_dish, make_profile, a
     that ignored MIX and picked uniformly from the pool would not produce this pattern.
     """
     balanced = [make_balanced_dish(f"Bal {i}", owner=alice) for i in range(3)]
-    one_pots = [
-        make_pool_dish(f"Pot {i}", owner=alice, role=RecipeRole.ONE_POT) for i in range(3)
-    ]
+    one_pots = [make_pool_dish(f"Pot {i}", owner=alice, role=RecipeRole.ONE_POT) for i in range(3)]
     balanced_ids = {d.pk for d in balanced}
     one_pot_ids = {d.pk for d in one_pots}
 
@@ -215,8 +218,10 @@ def test_favorites_bias_increases_selection_rate(
         if _filled(result)[0].dish_id == favourite.pk:
             hits += 1
 
-    # Unweighted rate is 1/4; a 3x bias lifts the expected rate to 3/6 = 0.5.
-    assert hits / trials > 0.38
+    # Unweighted rate is 1/4; a 3x bias lifts the expected rate to 3/6 = 0.5. The bound is
+    # tightened toward that 0.5 so a regression that merely halved the bias could not still
+    # pass (08.9 carried finding).
+    assert hits / trials > 0.44
 
 
 def test_no_duplicate_dishes_within_plan(make_pool_dish, make_profile, alice):
@@ -291,6 +296,29 @@ def test_backtracking_bounded(make_pool_dish, make_profile, make_tag, alice):
     assert len(result.unfilled) >= 1
 
 
+def test_backtracking_path_is_deterministic(make_pool_dish, make_profile, make_tag, alice):
+    """The RNG stream advances while backtracking, so a regression there would not show up in
+    ``test_same_seed_produces_identical_plan`` (a pure greedy fill). This scenario forces
+    backtracking and still demands byte-identical output across two same-seed runs.
+    """
+    chicken = make_tag("chicken")
+    for i in range(3):
+        make_pool_dish(f"Chicken {i}", owner=alice, tags=[chicken])
+    for i in range(2):
+        make_pool_dish(f"Plain {i}", owner=alice)
+
+    profile = make_profile(owner=alice, tag_limits={"chicken": 1})
+
+    first = generate_plan(alice, profile, seed=77, days=6, slots=["DINNER"])
+    second = generate_plan(alice, profile, seed=77, days=6, slots=["DINNER"])
+
+    assert first.backtracks > 0
+    assert [_entry_key(e) for e in first.entries] == [_entry_key(e) for e in second.entries]
+    assert first.unfilled == second.unfilled
+    assert first.reasons == second.reasons
+    assert first.backtracks == second.backtracks
+
+
 def test_generation_does_not_persist(make_pool_dish, make_profile, alice):
     for i in range(8):
         make_pool_dish(f"Dish {i}", owner=alice)
@@ -311,3 +339,123 @@ def test_result_carries_seed(make_pool_dish, make_profile, alice):
     result = generate_plan(alice, profile, seed=555, days=1, slots=["DINNER"])
 
     assert result.seed == 555
+
+
+# --- regeneration (08.7) -------------------------------------------------------------------
+
+
+def _seed_plan_with_entries(make_pool_dish, make_profile, make_plan, alice, *, days=5):
+    dishes = [make_pool_dish(f"Dish {i}", owner=alice) for i in range(10)]
+    profile = make_profile(owner=alice, source_scope="MINE")
+    plan = make_plan(
+        owner=alice,
+        profile=profile,
+        days=days,
+        seed=1,
+        profile_snapshot={"slots": ["DINNER"]},
+    )
+    entries = [
+        MealPlanEntry.objects.create(plan=plan, day_index=d, slot="DINNER", dish=dishes[d])
+        for d in range(days)
+    ]
+    return plan, dishes, entries
+
+
+def test_regenerate_keeps_locked_entries_and_rerolls_rest(
+    make_pool_dish, make_profile, make_plan, alice
+):
+    plan, dishes, entries = _seed_plan_with_entries(make_pool_dish, make_profile, make_plan, alice)
+    entries[0].is_locked = True
+    entries[0].save(update_fields=["is_locked"])
+
+    result = regenerate_plan(plan, seed=999)
+
+    day0 = next(e for e in result.entries if e.day_index == 0)
+    assert day0.dish_id == dishes[0].pk
+    assert day0.is_locked is True
+    assert result.seed == 999
+    assert len(result.entries) == 5
+
+
+def test_regenerate_without_a_seed_draws_a_fresh_one(
+    make_pool_dish, make_profile, make_plan, alice
+):
+    """ "Regenerate" means "same settings, different luck" — with no explicit seed it draws a
+    fresh random one, like ``reroll_entry`` (the 08.15 decision note). Rebuilding the exact
+    same week is "pass the plan's own seed back in".
+    """
+    plan, _dishes, _entries = _seed_plan_with_entries(
+        make_pool_dish, make_profile, make_plan, alice
+    )
+
+    fresh = regenerate_plan(plan).seed
+    assert fresh != plan.seed
+    assert 0 <= fresh <= 2**63 - 1
+    assert regenerate_plan(plan, seed=plan.seed).seed == plan.seed
+
+
+def test_regenerate_consumes_locked_tag_budget(
+    make_pool_dish, make_profile, make_plan, make_tag, alice
+):
+    chicken = make_tag("chicken")
+    locked_dish = make_pool_dish("Locked chicken", owner=alice, tags=[chicken])
+    make_pool_dish("Chicken B", owner=alice, tags=[chicken])
+    make_pool_dish("Chicken C", owner=alice, tags=[chicken])
+    for i in range(6):
+        make_pool_dish(f"Plain {i}", owner=alice)
+
+    profile = make_profile(owner=alice, source_scope="MINE", tag_limits={"chicken": 1})
+    plan = make_plan(
+        owner=alice, profile=profile, days=7, seed=5, profile_snapshot={"slots": ["DINNER"]}
+    )
+    MealPlanEntry.objects.create(
+        plan=plan, day_index=0, slot="DINNER", dish=locked_dish, is_locked=True
+    )
+    for d in range(1, 7):
+        MealPlanEntry.objects.create(plan=plan, day_index=d, slot="DINNER")
+
+    result = regenerate_plan(plan, seed=5)
+
+    unlocked_chicken = [
+        e
+        for e in result.entries
+        if e.dish is not None and not e.is_locked and e.dish.tags.filter(pk=chicken.pk).exists()
+    ]
+    assert unlocked_chicken == []
+
+
+def test_regenerate_carries_a_locked_empty_slot_without_drawing_a_candidate(
+    make_pool_dish, make_profile, make_plan, alice
+):
+    """A locked-but-empty slot (its dish was deleted, then the user locked it) is carried
+    through as empty and must not consume a candidate the other slots need — the generator
+    would otherwise fill it and ``update_plan_in_place`` would discard the dish (reviewer
+    finding). It is also the user's explicit choice, not a starved constraint, so it is not
+    reported as unfilled.
+    """
+    dishes = [make_pool_dish(f"Dish {i}", owner=alice) for i in range(3)]
+    profile = make_profile(owner=alice, source_scope="MINE")
+    plan = make_plan(
+        owner=alice, profile=profile, days=4, seed=1, profile_snapshot={"slots": ["DINNER"]}
+    )
+    MealPlanEntry.objects.create(plan=plan, day_index=0, slot="DINNER", dish=None, is_locked=True)
+    for d in range(1, 4):
+        MealPlanEntry.objects.create(plan=plan, day_index=d, slot="DINNER")
+
+    result = regenerate_plan(plan, seed=7)
+
+    day0 = next(e for e in result.entries if e.day_index == 0)
+    assert day0.dish is None
+    assert day0.is_locked is True
+    assert (0, "DINNER") not in result.unfilled
+    assert result.reasons == []
+    filled = _filled(result)
+    assert len(filled) == 3
+    assert {e.dish_id for e in filled} == {d.pk for d in dishes}
+
+
+def test_regenerate_without_a_profile_raises(make_plan, alice):
+    plan = make_plan(owner=alice, profile=None)
+
+    with pytest.raises(PlannerError):
+        regenerate_plan(plan)

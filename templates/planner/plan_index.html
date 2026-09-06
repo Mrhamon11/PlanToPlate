@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Meal planner — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Meal planner</h1>
+    {% if has_dishes and has_profile %}
+        <a class="btn btn-primary" href="{% url 'planner:plan-generate' %}">Generate a week</a>
+    {% endif %}
+</div>
+
+{% if not has_dishes %}
+    {% include "planner/_partials/_empty_pool.html" %}
+{% elif not has_profile %}
+    <div class="empty-state">
+        <h2>Set up a profile first</h2>
+        <p>
+            A profile is a saved set of planner settings — how many days, which meals, what to
+            avoid. The defaults are ready to use.
+        </p>
+        <p class="empty-state-actions">
+            <a class="btn btn-primary" href="{% url 'planner:profile-create' %}">New profile</a>
+        </p>
+    </div>
+{% else %}
+    <h2>Your plans</h2>
+    {% if plans %}
+        <ul class="card-list" role="list">
+            {% for plan in plans %}
+                <li class="card">
+                    <a class="card-link" href="{{ plan.get_absolute_url }}">
+                        {{ plan.name|default:"Untitled plan" }}
+                    </a>
+                    <p class="help-text">
+                        {{ plan.days }} day{{ plan.days|pluralize }} from {{ plan.start_date|date:"j M Y" }}
+                    </p>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No plans yet. <a href="{% url 'planner:plan-generate' %}">Generate your first week.</a></p>
+    {% endif %}
+
+    <h2>Profiles</h2>
+    <ul class="card-list" role="list">
+        {% for profile in profiles %}
+            <li class="card">
+                <a class="card-link" href="{% url 'planner:profile-edit' profile.pk %}">{{ profile.name }}</a>
+                {% if profile.is_default %}<span class="badge">Default</span>{% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+    <p><a class="btn" href="{% url 'planner:profile-list' %}">Manage profiles</a></p>
+{% endif %}
+{% endblock %}

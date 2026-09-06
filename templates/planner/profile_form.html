@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Edit {{ object.name }}{% else %}New planner profile{% endif %} — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{% if object %}Edit "{{ object.name }}"{% else %}New planner profile{% endif %}</h1>
+    <a class="btn" href="{% url 'planner:profile-list' %}">Back to profiles</a>
+</div>
+
+<p class="help-text">
+    A profile is a saved set of planner settings. The defaults are ready to use — pick your
+    days and press Generate. Adjust the gears below only when you want to.
+</p>
+
+<form method="post" class="profile-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <div class="field {% if form.name.errors %}has-error{% endif %}">
+        <label for="{{ form.name.id_for_label }}">Profile name <span aria-hidden="true">*</span></label>
+        {{ form.name }}
+        {% for error in form.name.errors %}<p class="field-errors" role="alert">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div class="field">
+        <label for="{{ form.is_default.id_for_label }}">{{ form.is_default }} Use this as my default profile</label>
+    </div>
+
+    {% for group in form.grouped %}
+        <fieldset class="profile-section">
+            <legend>{{ group.title }}</legend>
+            {% for field in group.fields %}
+                {% include "_partials/_form_field.html" with field=field %}
+            {% endfor %}
+        </fieldset>
+    {% endfor %}
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save profile</button>
+        <a class="btn" href="{% url 'planner:profile-list' %}">Cancel</a>
+    </div>
+</form>
+{% endblock %}

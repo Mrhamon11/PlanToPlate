@@ -24,6 +24,10 @@ from core.models import OwnedModel
 
 MAX_DAYS = 7
 
+#: Design default for gear 6 (``no_repeat_days``). A cleared field falls back to this, not 0
+#: (which silently disables no-repeat protection).
+DEFAULT_NO_REPEAT_DAYS = 14
+
 
 class MealSlot(models.TextChoices):
     BREAKFAST = "BREAKFAST", "Breakfast"
@@ -123,7 +127,7 @@ class MealPlanProfile(models.Model):
     )
 
     # gear 6 — no repeats
-    no_repeat_days = models.PositiveSmallIntegerField(default=14)
+    no_repeat_days = models.PositiveSmallIntegerField(default=DEFAULT_NO_REPEAT_DAYS)
 
     # gear 7 — quality
     min_rating = models.PositiveSmallIntegerField(
@@ -173,6 +177,11 @@ class MealPlanProfile(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    def get_absolute_url(self) -> str:
+        from django.urls import reverse
+
+        return reverse("planner:profile-edit", args=[self.pk])
+
     def clean(self) -> None:
         super().clean()
         validate_slots(self.slots)
@@ -195,7 +204,9 @@ class MealPlan(OwnedModel):
 
     name = models.CharField(max_length=200, blank=True)
     start_date = models.DateField()
-    days = models.PositiveSmallIntegerField()
+    days = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(MAX_DAYS)],
+    )
     profile = models.ForeignKey(
         MealPlanProfile,
         on_delete=models.SET_NULL,
@@ -217,9 +228,21 @@ class MealPlan(OwnedModel):
 
     class Meta(OwnedModel.Meta):
         ordering = ["-created_at"]
+        constraints = [
+            *OwnedModel.Meta.constraints,
+            models.CheckConstraint(
+                condition=Q(days__gte=1, days__lte=MAX_DAYS),
+                name="planner_mealplan_days_range",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name or f"Meal plan #{self.pk}"
+
+    def get_absolute_url(self) -> str:
+        from django.urls import reverse
+
+        return reverse("planner:plan-detail", args=[self.pk])
 
 
 class MealPlanEntry(models.Model):

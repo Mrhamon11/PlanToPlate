@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Planner profiles — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Planner profiles</h1>
+    <a class="btn btn-primary" href="{% url 'planner:profile-create' %}">New profile</a>
+</div>
+
+{% if profiles %}
+    <ul class="card-list" role="list">
+        {% for profile in profiles %}
+            <li class="card">
+                <a class="card-link" href="{% url 'planner:profile-edit' profile.pk %}">{{ profile.name }}</a>
+                {% if profile.is_default %}<span class="badge">Default</span>{% endif %}
+                <p class="help-text">
+                    {{ profile.days }} day{{ profile.days|pluralize }},
+                    {{ profile.get_dish_template_display }}
+                </p>
+                <a class="btn btn-small" href="{% url 'planner:profile-delete' profile.pk %}">Delete</a>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No planner profiles yet. Create one to start planning a week of meals.</p>
+{% endif %}
+{% endblock %}

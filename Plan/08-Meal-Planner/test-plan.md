@@ -50,11 +50,12 @@ One test per gear, each proving the gear actually narrows the pool.
 | `test_tag_limit_zero_excludes_entirely` | |
 | `test_locked_entries_preserved_on_regenerate` | |
 | `test_locked_entries_consume_tag_budget` | A locked chicken dish plus a limit of 1 means no *second* chicken. Easy to get wrong, and wrong in the direction the user will notice. |
+| `test_regenerate_carries_a_locked_empty_slot_without_drawing_a_candidate` | A locked-but-empty slot (dish deleted, then locked) is carried through empty — the generator must not fill it and waste a candidate the other slots need, and it is not reported as unfilled. |
 | `test_balanced_template_covers_roles` | Selected dishes span protein, carb, and vegetable. |
 | `test_one_pot_template_selects_one_pot` | |
 | `test_mix_template_varies` | |
 | `test_favorites_bias_increases_selection_rate` | Over many seeds, favourites are selected more often than the unweighted rate. |
-| `test_no_duplicate_dishes_within_plan` | Unless the pool is too small to avoid it. |
+| `test_no_duplicate_dishes_within_plan` | A plan never repeats a dish. When the pool is too small to fill every slot without repeating, the surplus slots are left **unfilled** (see `test_partial_plan_when_pool_too_small`) — the generator never emits a duplicate to paper over a short pool. |
 | `test_partial_plan_when_pool_too_small` | Unfilled slots, and the plan still returns. |
 | `test_unfilled_slots_have_reasons` | Every unfilled slot carries a human-readable cause. |
 | `test_empty_pool_returns_all_unfilled_with_reason` | The new-user path. |
@@ -72,6 +73,7 @@ One test per gear, each proving the gear actually narrows the pool.
 | `test_composition_respects_exclusions` | |
 | `test_composition_respects_visibility` | |
 | `test_composition_falls_back_when_role_missing` | No vegetable recipes → unfilled with a reason, not a crash. |
+| `test_composition_respects_tag_limits` | A composed dish counts against `tag_limits` the same as a real dish: a trio that would breach the remaining budget is skipped, and once the budget is spent the slot degrades to an unfilled entry whose reason names the tag limit. Seed pinned. |
 | `test_composed_dish_name_lists_components` | |
 
 ## Persistence — `planner/tests/test_persist.py`
@@ -119,6 +121,7 @@ One test per gear, each proving the gear actually narrows the pool.
 | `test_cannot_generate_from_others_profile` | |
 | `test_cannot_swap_in_invisible_dish` | Manual entry assignment is visibility-checked. |
 | `test_cannot_inject_profile_snapshot` | Server-generated only. |
+| `test_shared_plan_hides_profile_snapshot_from_readers` | The snapshot (owner's allergy list, tag limits, profile name) is owner-only on read — `{}` for a sharee or a PUBLIC-plan viewer (D35). |
 | `test_generation_time_bounded` | A hostile profile cannot pin the CPU. |
 
 ## UI — `planner/tests/test_views.py`
@@ -126,12 +129,32 @@ One test per gear, each proving the gear actually narrows the pool.
 | Test | Asserts |
 |---|---|
 | `test_profile_form_renders_all_gears` | All eight present. |
-| `test_plan_grid_renders` | |
-| `test_unfilled_slot_shows_reason_inline` | |
-| `test_lock_toggle_htmx` | |
-| `test_reroll_htmx_updates_one_card` | |
+| `test_plan_grid_renders` | One card per day/slot; days numbered. |
+| `test_grid_orders_slots_breakfast_lunch_dinner` | Grid imposes meal order, not the alphabetical model default. |
+| `test_unfilled_slot_shows_reason_inline` | The generator's reason string rendered in the card. |
+| `test_preview_seed_round_trips_into_save` | Preview seed carried into the persist POST. |
+| `test_lock_toggle_htmx` | Returns just the one card; entry locked. |
+| `test_reroll_htmx_updates_one_card` | Only the target entry changes. |
+| `test_manual_swap_is_visibility_checked` | An invisible dish id is a 404, slot unchanged. |
+| `test_plan_grid_write_actions_forbidden_for_sharee` | A read-only sharee reads the grid, 403 on every write. |
+| `test_reducing_days_asks_before_dropping_entries` | D39 confirm first; drop only on the confirmed POST. |
+| `test_growing_days_adds_empty_cells` | Extra days appear unfilled, no confirm needed. |
+| `test_shopping_preview_shows_lines_and_staples_toggle` | Ingredient lines + staples checkbox. |
+| `test_shopping_preview_warns_when_checked_items_would_be_replaced` | Task-07 warning surfaced. |
+| `test_generate_shopping_list_from_plan` | GENERATED items written, list linked. |
 | `test_empty_pool_shows_guidance` | A new user gets a route forward, not a blank grid. |
-| `test_mobile_layout_stacks` | |
+| `test_empty_pool_when_scope_excludes_everything` | Dishes exist but none in scope → guidance, not a silent all-unfilled grid. |
+| `test_auto_composed_slot_is_marked_in_preview` | A composed slot is labelled in the grid. |
+| `test_mobile_layout_stacks` | `.plan-grid` is mobile-first: single column until a breakpoint. |
+
+## Composition / generator — reviewer-finding rework (2026-09-06)
+
+| Test | Asserts |
+|---|---|
+| `test_compose.py::test_composed_dishes_within_one_plan_are_distinct` | Composed dishes never repeat within a plan; deterministic under seed. |
+| `test_compose.py::test_composes_protein_carb_vegetable` (reworked) | One recipe per role → one composed slot, the surplus honestly unfilled. |
+| `test_generate.py::test_regenerate_without_a_seed_draws_a_fresh_one` | Regenerate with no seed ≠ the plan's own seed. |
+| `test_api.py` / `test_security.py` `days` bound | `PATCH {"days": 8}` / huge is a 400, not a mass entry write. |
 
 ## Manual verification
 

@@ -6,13 +6,14 @@ planner testable at all (C9). It degrades honestly: an over-constrained request 
 a partial plan whose every empty slot carries a human-readable reason, and it never loops —
 forward progress or a bounded backtrack, capped at :data:`MAX_BACKTRACKS`.
 
-Nothing here is persisted. ``generate_plan`` returns **unsaved** ``MealPlanEntry`` instances;
-08.6 decides what to write.
+Nothing here is persisted. ``generate_plan`` returns **unsaved** ``MealPlanEntry`` instances
+(and, for a composed ``BALANCED`` slot, an unsaved ``Dish`` on the entry); 08.6 decides what
+to write.
 
-The ``BALANCED``-with-no-qualifying-dish fallback (compose a dish from a protein + carb +
-vegetable recipe) is 08.5. Until then :func:`_compose_balanced_dish` is a seam that returns
-``None``, so the slot degrades to an explained unfilled entry rather than half-building
-composition here.
+When a ``BALANCED`` slot has no qualifying dish the generator composes a transient one from a
+protein + carb + vegetable recipe (:mod:`planner.services.compose`). A ``MIX`` slot leaning
+balanced does the same; a ``MIX`` slot leaning one-pot, and every ``ONE_POT`` slot, fall back
+to any dish instead — only strict ``BALANCED`` has no dish-level fallback.
 """
 
 from __future__ import annotations
@@ -27,12 +28,22 @@ from meals.models import Dish, DishStats
 from meals.services.dishes import roles as dish_roles
 from planner.models import DishTemplate, MealPlanEntry, MealSlot
 from planner.services.candidates import build_candidate_pool, explain_empty_pool
+from planner.services.compose import (
+    COMPOSED_ROLES,
+    build_recipe_role_pools,
+    compose_balanced_dish,
+)
+from planner.services.exceptions import PlannerError
 from recipes.models import RecipeRole
 
 if TYPE_CHECKING:
-    from planner.models import MealPlanProfile
+    from planner.models import MealPlan, MealPlanProfile
 
 MAX_BACKTRACKS = 50
+
+#: Upper bound for a randomly drawn regenerate seed — a signed 64-bit ``BigIntegerField``
+#: (matches ``planner.serializers.SEED_MAX`` / ``persist._SEED_CEILING``).
+_SEED_CEILING = 2**63 - 1
 
 _BALANCED_ROLES = frozenset(
     {RecipeRole.PROTEIN.value, RecipeRole.CARB.value, RecipeRole.VEGETABLE.value}
@@ -91,9 +102,12 @@ def generate_plan(
             user=user, dish_id__in=list(pool_by_id), is_favorite=True
         ).values_list("dish_id", flat=True)
     )
-    # Deliberate Decimal->float: ``favorites_bias`` is a selection weight handed to
-    # ``rng.choices``, not a measured quantity, so ``CLAUDE.md``'s "never float" (which guards
-    # kitchen measurements against binary rounding) does not apply here.
+    # ``favorites_bias`` is a selection weight handed to ``rng.choices``, never a measured
+    # quantity — ``CLAUDE.md``'s "never float" guards kitchen measurements against binary
+    # rounding and does not reach here. The ``float()`` is also *required*, not merely
+    # tolerated: ``random.choices`` sums its weights against ``0.0`` internally and raises
+    # ``TypeError`` on a ``Decimal`` (verified on CPython 3.13), so the weight list must be
+    # float end to end.
     bias = float(profile.favorites_bias)
     template = profile.dish_template
     # ``MIX`` alternates its preferred sub-template slot by slot; the RNG picks the starting
@@ -109,15 +123,40 @@ def generate_plan(
     }
 
     tags_by_dish = {dish.pk: {tag.name.lower() for tag in dish.tags.all()} for dish in pool}
-    for entry in locked_by_cell.values():
-        if entry.dish_id and entry.dish_id not in tags_by_dish:
-            tags_by_dish[entry.dish_id] = {tag.name.lower() for tag in entry.dish.tags.all()}
+    # Locked entries can hold a dish that never entered the pool (its rating dropped, its
+    # no-repeat window is open) — fetch their tags in one batched query, not one per entry.
+    missing_locked_ids = [
+        entry.dish_id
+        for entry in locked_by_cell.values()
+        if entry.dish_id and entry.dish_id not in tags_by_dish
+    ]
+    if missing_locked_ids:
+        for dish in Dish.objects.filter(pk__in=missing_locked_ids).prefetch_related("tags"):
+            tags_by_dish[dish.pk] = {tag.name.lower() for tag in dish.tags.all()}
 
     balanced_exists = any(_is_balanced(dish) for dish in pool)
     one_pot_exists = any(_has_one_pot(dish) for dish in pool)
     empty_pool_reason = "" if pool else explain_empty_pool(user, profile)
 
+    # Recipe role pools for composition are built once, lazily — a plan that never hits an
+    # unfilled BALANCED slot pays nothing for them.
+    role_pool_cache: dict[str, dict[str, list]] = {}
+
+    def role_pools() -> dict[str, list]:
+        if "pools" not in role_pool_cache:
+            role_pool_cache["pools"] = build_recipe_role_pools(user, profile)
+        return role_pool_cache["pools"]
+
     assignments: dict[int, Dish | None] = {}
+    composed_recipe_ids: set[int] = set()
+    #: Recipe-id trios currently placed as composed dishes. Passed to ``compose_balanced_dish``
+    #: as ``forbidden_signatures`` so two BALANCED slots never compose the identical trio — a
+    #: repeat that ``save_plan`` would collapse onto one ``Dish`` row, silently repeating a
+    #: dinner (reviewer finding 1). Released for a slot cleared by a backtrack.
+    composed_signatures: set[frozenset[int]] = set()
+    #: slot index → (trio signature, recipe ids) of the composed dish placed there, so a
+    #: backtrack that clears the slot can release both.
+    composed_at: dict[int, tuple[frozenset[int], list[int]]] = {}
     tried: dict[int, set[int]] = defaultdict(set)
     reason_at: dict[int, str] = {}
     backtracks = 0
@@ -133,9 +172,10 @@ def generate_plan(
         used_ids, budget = _state_before(
             index, grid, assignments, locked_by_cell, tags_by_dish, limits
         )
+        slot_template = _slot_template(template, index, mix_phase)
         candidates = _eligible(
             pool,
-            template=_slot_template(template, index, mix_phase),
+            template=slot_template,
             used_ids=used_ids,
             budget=budget,
             excluded=tried[index],
@@ -148,20 +188,49 @@ def generate_plan(
             index += 1
             continue
 
+        if slot_template == DishTemplate.BALANCED:
+            composed = compose_balanced_dish(
+                role_pools(),
+                rng,
+                avoid_recipe_ids=composed_recipe_ids,
+                forbidden_signatures=composed_signatures,
+                max_total_minutes=profile.max_total_minutes,
+                tag_budget=budget,
+            )
+            if composed is not None:
+                recipe_ids = [recipe.pk for recipe in composed._composed_recipes]
+                signature = frozenset(recipe_ids)
+                assignments[index] = composed
+                composed_recipe_ids.update(recipe_ids)
+                composed_signatures.add(signature)
+                composed_at[index] = (signature, recipe_ids)
+                index += 1
+                continue
+
         undo = _last_undoable(index, grid, assignments, locked_by_cell)
         if undo is None or backtracks >= MAX_BACKTRACKS:
-            assignments[index] = _compose_balanced_dish(user, profile, rng, template)
-            if assignments[index] is None:
-                reason_at[index] = empty_pool_reason or _slot_reason(
-                    template, balanced_exists, budget, limits
-                )
+            missing_roles: list[str] = []
+            if slot_template == DishTemplate.BALANCED:
+                pools = role_pools()
+                missing_roles = [role for role in COMPOSED_ROLES if not pools.get(role)]
+            reason_at[index] = empty_pool_reason or _slot_reason(
+                slot_template, balanced_exists, budget, limits, missing_roles=missing_roles
+            )
             index += 1
             continue
 
+        # ``_last_undoable`` only ever returns a slot holding a *real* dish — a composed slot is
+        # never worth backtracking past (undoing it just re-derives the same trio and burns the
+        # budget; reviewer finding 1's related note). Exclude the retried dish by pk.
         tried[undo].add(assignments[undo].pk)
         for cleared in range(undo, index + 1):
             assignments.pop(cleared, None)
             reason_at.pop(cleared, None)
+            released = composed_at.pop(cleared, None)
+            if released is not None:
+                signature, recipe_ids = released
+                composed_signatures.discard(signature)
+                composed_recipe_ids.difference_update(recipe_ids)
             if cleared != undo:
                 tried[cleared].clear()
         backtracks += 1
@@ -169,6 +238,43 @@ def generate_plan(
 
     return _build_result(
         grid, assignments, locked_by_cell, reason_at, empty_pool_reason, seed, backtracks
+    )
+
+
+def regenerate_plan(plan: MealPlan, *, seed: int | None = None) -> PlanResult:
+    """Re-roll a saved plan's unlocked slots.
+
+    Locked entries are carried through unchanged and still spend their tag budget — a locked
+    chicken dish plus a limit of one means the re-roll adds no *second* chicken (``design.md``,
+    "``is_locked``"). ``seed`` defaults to a **fresh random draw** — "regenerate" means "same
+    settings, different luck" (the 08.15 decision note; matches ``reroll_entry``). Pass an
+    explicit seed to rebuild a specific week.
+
+    The result is a fresh preview — nothing is written. Persisting it back onto ``plan`` is
+    ``planner.services.persist``'s job.
+    """
+    if plan.profile is None:
+        raise PlannerError(
+            "This plan's profile has been deleted, so it cannot be regenerated. Start a new "
+            "plan from a profile instead — the saved snapshot still explains this one."
+        )
+
+    # Every locked entry is carried through untouched, *including a locked-but-empty slot* (a
+    # slot whose dish was deleted, then locked). Excluding empty ones would let the generator
+    # fill that cell and burn a candidate / tag-budget that ``update_plan_in_place`` then
+    # discards, shrinking every other slot's pool (reviewer finding).
+    locked = list(plan.entries.filter(is_locked=True).select_related("dish"))
+    snapshot = plan.profile_snapshot or {}
+    slots = snapshot.get("slots") or list(plan.profile.slots)
+    if seed is None:
+        seed = random.randrange(_SEED_CEILING)  # noqa: S311 - a plan seed, not a secret (C9)
+    return generate_plan(
+        plan.owner,
+        plan.profile,
+        seed=seed,
+        days=plan.days,
+        slots=slots,
+        locked=locked,
     )
 
 
@@ -187,9 +293,13 @@ def _build_result(
                 slot=slot,
                 dish=dish,
                 is_locked=locked_entry is not None,
+                # Carry the annotation from the locked source entry — a user who locks *and*
+                # notes a slot must not lose the note when the plan is re-persisted after a
+                # regenerate (08.10 carried finding). Rolled slots have no note.
+                note=locked_entry.note if locked_entry is not None else "",
             )
         )
-        if dish is None:
+        if dish is None and locked_entry is None:
             unfilled.append((day, slot))
             reasons.append(reason_at.get(index) or empty_pool_reason or _GENERIC_SLOT_REASON)
     return PlanResult(
@@ -213,11 +323,22 @@ def _state_before(
         dish = locked_entry.dish if locked_entry is not None else assignments.get(position)
         if dish is None:
             continue
-        used.add(dish.pk)
-        for tag in tags_by_dish.get(dish.pk, ()):
+        if dish.pk is not None:
+            used.add(dish.pk)
+        for tag in _dish_tag_names(dish, tags_by_dish):
             if tag in budget:
                 budget[tag] -= 1
     return used, budget
+
+
+def _dish_tag_names(dish: Dish, tags_by_dish) -> set[str] | tuple[()]:
+    """Lowercased tag names for a pool dish (from the prefetched map) or a transient composed
+    dish (from the union of its recipe tags, stashed on ``_composed_tags``).
+    """
+    composed = getattr(dish, "_composed_tags", None)
+    if composed is not None:
+        return composed
+    return tags_by_dish.get(dish.pk, ())
 
 
 def _slot_template(template, index: int, mix_phase: int):
@@ -278,40 +399,66 @@ def _within_budget(dish: Dish, budget: dict[str, int], tags_by_dish) -> bool:
 def _weighted_pick(candidates: list[Dish], favorite_ids, bias: float, rng: random.Random) -> Dish:
     ordered = sorted(candidates, key=lambda dish: dish.pk)
     weights = [bias if dish.pk in favorite_ids else 1.0 for dish in ordered]
+    # ``favorites_bias`` is only bounded ``>= 0`` on the model, so a profile with
+    # ``favorites_bias = 0`` and an all-favourites candidate set would sum to zero weight and
+    # make ``rng.choices`` raise ``ValueError`` ("Total of weights must be greater than
+    # zero"). Fall back to a uniform draw in that corner rather than 500 (08.9 carried
+    # finding) — a zero bias meaning "don't prefer favourites" degrades to "no preference".
+    if sum(weights) <= 0:
+        weights = None
     return rng.choices(ordered, weights=weights, k=1)[0]  # noqa: S311 - see module docstring
 
 
 def _last_undoable(index, grid, assignments, locked_by_cell) -> int | None:
+    """The most recent slot holding a **real** dish that a backtrack could re-choose. A
+    composed slot (``dish.pk is None``) is skipped — undoing it only re-derives the identical
+    trio and wastes a backtrack; the slot needing help degrades to an unfilled entry instead.
+    """
     for position in range(index - 1, -1, -1):
         if grid[position] in locked_by_cell:
             continue
-        if assignments.get(position) is not None:
+        dish = assignments.get(position)
+        if dish is not None and dish.pk is not None:
             return position
     return None
 
 
-def _compose_balanced_dish(user, profile, rng, template):
-    """Seam for 08.5. When ``BALANCED`` has no qualifying dish, the design composes a transient
-    dish from a protein + carb + vegetable recipe. Not built in this run — returning ``None``
-    lets the slot fall through to an explained unfilled entry.
-    """
-    return None
-
-
-def _slot_reason(template, balanced_exists: bool, budget: dict[str, int], limits) -> str:
-    if template == DishTemplate.BALANCED and not balanced_exists:
-        return (
-            "No dish in your library covers protein, carb and vegetable together, and "
-            "composing one from separate recipes is not available yet."
-        )
+def _slot_reason(
+    template,
+    balanced_exists: bool,
+    budget: dict[str, int],
+    limits,
+    *,
+    missing_roles: Sequence[str] = (),
+) -> str:
+    over_limit = bool(limits) and any(budget.get(tag, 1) <= 0 for tag in limits)
     if template == DishTemplate.BALANCED:
+        if not balanced_exists and missing_roles:
+            return (
+                "No dish covers protein, carb and vegetable together, and you have no "
+                f"{_humanise_roles(missing_roles)} recipe to compose one."
+            )
+        if over_limit:
+            return (
+                "Every dish and every recipe trio for this slot is over one of this week's "
+                "tag limits."
+            )
         return (
             "Not enough dishes covering protein, carb and vegetable to fill every slot "
             "without repeating."
         )
-    if limits and any(budget.get(tag, 1) <= 0 for tag in limits):
+    if over_limit:
         return "Every remaining dish is over one of this week's tag limits."
     return "Not enough distinct dishes match the constraints to fill every slot."
+
+
+def _humanise_roles(roles: Sequence[str]) -> str:
+    """``["PROTEIN"]`` → "protein"; ``["PROTEIN", "VEGETABLE"]`` → "protein or vegetable";
+    all three → "protein, carb or vegetable"."""
+    names = [role.lower() for role in roles]
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} or {names[-1]}"
 
 
 def _is_balanced(dish: Dish) -> bool:
@@ -322,4 +469,10 @@ def _has_one_pot(dish: Dish) -> bool:
     return _ONE_POT_ROLE in dish_roles(dish)
 
 
-__all__ = ["MAX_BACKTRACKS", "PlanResult", "generate_plan"]
+__all__ = [
+    "MAX_BACKTRACKS",
+    "PlannerError",
+    "PlanResult",
+    "generate_plan",
+    "regenerate_plan",
+]

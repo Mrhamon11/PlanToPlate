@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ profile.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+{% url 'planner:profile-delete' profile.pk as delete_url %}
+{% url 'planner:profile-list' as cancel_url %}
+{% include "_partials/_confirm_delete.html" with object_name=profile.name delete_url=delete_url cancel_url=cancel_url %}
+{% endblock %}
