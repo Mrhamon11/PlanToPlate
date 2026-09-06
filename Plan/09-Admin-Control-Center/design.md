@@ -81,6 +81,14 @@ own. The confirmation page **must show the count per model** — "This will perm
 Django's stock delete confirmation lists objects individually, which is unreadable at 200 rows.
 A summary count is what an admin can actually act on.
 
+**Reconcile the D41 tombstone blind spot here.** Deleting a user cascades `owner` and collects
+their recipes, dishes and ingredients in one pass. A `GENERATED` `ListItem` on *another* user's
+shopping list can carry two content FKs (`ingredient` + `dish`); the `lists/signals.py`
+`pre_delete` receivers each skip it because the other FK is still set, so both null and
+`lists_listitem_has_content` aborts the delete transaction (`ARCHITECTURE.md` D41). The
+delete-user flow must handle this — a two-FK branch in the receivers, or stamping the tombstone
+text before the cascade runs.
+
 ### Entitle as admin
 
 A toggle setting `is_staff`. Guarded so that the last remaining admin cannot be demoted or

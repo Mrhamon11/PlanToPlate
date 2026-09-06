@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Lists — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Lists</h1>
+    <a class="btn btn-primary" href="{% url 'lists:create' %}">New list</a>
+</div>
+
+{% include "lists/_partials/_list_index.html" %}
+{% endblock %}

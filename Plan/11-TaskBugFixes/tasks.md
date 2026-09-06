@@ -126,12 +126,16 @@ need a full design) only when a subtask is actually picked up.
   filters** link (added in 05.15) stays always-visible. Keep the no-JS path working — the
   fields must still be reachable with the disclosure closed by default only when JS is on.
 
-- [ ] **11.13 — Ingredient / sub-recipe typeahead has no keyboard navigation**
-  *Found in:* task 05 dev test, `static/js/recipe-editor.js` + `_component_row.html`.
+- [ ] **11.13 — Ingredient / sub-recipe / dish-recipe typeahead has no keyboard navigation**
+  *Found in:* task 05 dev test, re-confirmed task 07 dev test (finding 4).
+  `static/js/recipe-editor.js` + `_component_row.html` (recipe ingredient & sub-recipe rows)
+  **and the dish form's recipe typeahead** (same `recipe-editor.js` pattern).
   *Issue:* the custom typeahead dropdown can't be driven with the arrow keys / Enter the way a
   native `<select>` can — a mouse is required to pick a result. Add ArrowUp/ArrowDown to move a
   highlight through `.component-results`, Enter to choose, Escape to dismiss, with
-  `aria-activedescendant` wiring for screen readers.
+  `aria-activedescendant` wiring for screen readers. Escape-to-dismiss now partly exists via
+  `menus.js` (07.18) — the arrow-key highlight + Enter-to-choose is what remains. Fix every
+  place that renders `.component-results` in one pass.
 
 - [ ] **11.14 — Recipe-delete blocker handling should become a small registry**
   *Found in:* task 06 review (NB3), `recipes/services/deletion.py`.
@@ -219,3 +223,67 @@ need a full design) only when a subtask is actually picked up.
   same pattern. One fix closes all three: have `_book_detail_context` re-fetch the book with
   `prefetch_related("entries__recipe")` (or take a prefetched instance). Add a query-count test
   for the fragment endpoints. Fine at 10–20 users. Sibling of [[11.17]].
+
+- [ ] **11.22 — Recipe added to a shopping list should expand to its ingredients**
+  *Found in:* task 07 dev test (finding 5c).
+  *Issue:* `add_recipe_to_list` always adds a recipe as a single reference line, on every kind
+  of list — the 07.5 decision, pinned by `test_add_recipe_adds_recipe_reference_not_ingredients`.
+  A user reading a recipe wants to add *all its ingredients* to a shopping list without first
+  building a `Dish`. Wanted: on a `SHOPPING` list, a recipe expands to its ingredient lines
+  **at the component quantities as listed — no yield scaling** (yield only scales a recipe used
+  *as a sub-recipe*; a recipe added directly is `factor=1`). Sub-recipe components still flatten
+  through task 05's `flatten` service. On every other kind of list it stays a reference line, as
+  now. *Needs:* reverse the 07.5 decision in `Plan/07-Lists-And-Shopping/design.md`, update
+  `test_add_recipe_adds_recipe_reference_not_ingredients` and the test-plan row, extend
+  `add_recipe_to_list` (mirror `add_dish_to_list`'s SHOPPING branch), and wire the
+  "Add to list ▾" recipe control + the generic-list add form. Provenance: record the
+  contributing recipe the same single-contributor way `ListItem.dish` records a dish — needs a
+  `ListItem.recipe`-as-provenance rule or accept null provenance for recipe-sourced lines.
+
+- [x] **11.23 — No UI to edit a list item's quantity / unit after it is added**
+  *Found in:* task 07 dev test (finding 5c.ii). **Pulled back into task 07 as subtask 07.23**
+  (2026-09-06) — the user needs it now: an aggregated line like "2 cups chicken breast" is not
+  a buyable quantity, and the shopping list is not usable without a manual override. Done in
+  task 07, not here.
+
+- [ ] **11.24 — Manual ordering for shopping lists (store-walk order)**
+  *Found in:* task 07 dev test (finding 5c.ii).
+  *Issue:* the shopping detail groups by aisle and sorts alphabetically within each aisle;
+  there is no manual control (the generic list has up/down via `move_item`, the shopping list
+  does not). A user wants to order the list the way they walk the store — entrance to checkout.
+  *Needs a design decision:* is this (a) a **per-user aisle order** preference (reorder the
+  aisle *sections*, persisted per user, independent of any one list), (b) **within-aisle item
+  order** (sort each aisle by `position`, give rows up/down like the generic list), or (c)
+  both? (a) is the stronger match for the stated use case ("where in the store items are
+  placed") and is new schema (a per-user `AisleOrder` or a JSON preference). Write the design
+  slice when picked up. Sibling of [[11.12]]/[[11.13]] in being pure UI/UX, but this one needs
+  real design.
+
+- [x] **11.25 — `<details>` menus and typeahead dropdowns do not close on outside click**
+  *Found in:* task 07 dev test (finding 5b). App-wide, task 02 territory.
+  *Issue:* every `<details class="nav-menu">` (nav profile/overflow menu, "Add to list ▾",
+  "Add to book ▾") stays open until its own summary is clicked again, and opening a second
+  leaves the first open. The custom typeahead result dropdowns (`static/js/recipe-editor.js`
+  `.component-results` on the recipe ingredient / sub-recipe rows and the dish recipe row) have
+  the same problem — they don't dismiss on outside click or blur.
+  **Fixed in the task 07 continuation (2026-09-05):** new `static/js/menus.js`, loaded from
+  `base.html`. Closes open `details.nav-menu` disclosures and empties typeahead
+  `.component-results` on outside-click and Escape, and closes other open disclosures when one
+  opens. `recipe-editor.js` unchanged (it already clears results on a pick). Native `<details>`
+  still works with no JS. See `Plan/07-Lists-And-Shopping/tasks.md` 07.18.
+
+- [ ] **11.26 — Lists have no share control in the UI**
+  *Found in:* task 07 review (NB) + task 07 dev test (finding 9).
+  *Issue:* `List` is an `OwnedModel` and the view-only sharing infrastructure (task 03) applies,
+  but no share entry point was ever put on the list pages, so a list cannot be shared by
+  clicking anything. Wanted (near-term, view-only): reuse task 03's `_partials/_share_modal.html`
+  on the list index / detail pages, exactly as recipes/dishes/books do. Editable/collaborative
+  sharing is task 13, not this. Small — just wiring an existing partial + the share view/action
+  for `List`.
+
+- [ ] **11.27 — `MENU` and `MEAL_PLAN` list kinds are behaviourally identical to `GENERIC`**
+  *Found in:* task 07 dev test (finding 1).
+  *Issue:* only `SHOPPING` has distinct behaviour; `MENU`, `MEAL_PLAN`, and `GENERIC` differ
+  only in their label and index grouping heading. Decide: keep them as harmless labels, keep
+  only `MEAL_PLAN` (task 08 may use it) and drop `MENU`, or collapse to `SHOPPING` + `GENERIC`.
+  Cosmetic; resolve whenever task 08 settles whether it creates a `MEAL_PLAN`-kind list.

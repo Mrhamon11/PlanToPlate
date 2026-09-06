@@ -108,6 +108,7 @@
             {% url 'meals:dish-copy' dish.pk as copy_url %}
             {% include "_partials/_copy_button.html" with object=dish copy_url=copy_url %}
         {% endif %}
+        {% include "_partials/_add_to_list.html" with object=dish target_kind="dish" %}
     </div>
 
     <p><a href="{% url 'meals:dish-list' %}">&larr; All dishes</a></p>

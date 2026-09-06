@@ -3,10 +3,9 @@ The home dashboard's inner content — included by the full-page template and re
 directly for an HTMX request to the same view (core.views.HomeView). Never extends base.html:
 this is a fragment.
 
-The section links use literal paths, matching templates/_partials/_nav.html — the recipes /
-dishes / books apps have routes (tasks 04-06); lists and planner (07-08) do not yet, so their
-cards stay non-interactive until then. Each of those two tasks carries a note to turn its card
-into a link on the way through. A richer dashboard (recently viewed, this week's plan, active
+The section links use literal paths, matching templates/_partials/_nav.html — recipes /
+dishes / books / lists have routes (tasks 04-07); planner (08) does not yet, so its card stays
+non-interactive until then. A richer dashboard (recently viewed, this week's plan, active
 list) is task 12.
 {% endcomment %}
 <h1>Welcome back, {{ user.username }}</h1>
@@ -25,10 +24,10 @@ list) is task 12.
         <h2>Books</h2>
         <p class="text-muted">Organise recipes into collections, your way.</p>
     </a>
-    <div class="card">
+    <a class="card card-link" href="/lists/">
         <h2>Lists</h2>
-        <p class="text-muted">Coming soon.</p>
-    </div>
+        <p class="text-muted">Shopping lists, menus, and anything else worth keeping in order.</p>
+    </a>
     <div class="card">
         <h2>Planner</h2>
         <p class="text-muted">Coming soon.</p>

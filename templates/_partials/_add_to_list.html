@@ -1,0 +1,34 @@
+{% comment %}
+"Add to list ▾" control on the recipe and dish detail pages (07.12). A <details>/<summary>
+dropdown so it opens and closes with zero JavaScript, matching _add_to_book.html and the nav
+overflow menu.
+
+Adds the object to one of the current user's own lists via lists:add-object, which re-checks
+the object is visible_to the requester. On a SHOPPING list a dish is expanded to its
+ingredients; on any other kind of list a recipe or dish stays a single reference line.
+
+Context: object, target_kind ("recipe" | "dish"). `user.lists` is OwnedModel's reverse
+accessor for lists this user owns.
+{% endcomment %}
+{% with my_lists=user.lists.all %}
+<details class="add-to-list nav-menu">
+    <summary class="btn" aria-haspopup="menu">Add to list &#9662;</summary>
+    <div class="nav-menu-panel" role="menu">
+        {% if my_lists %}
+            <form method="post" action="{% url 'lists:add-object' target_kind object.pk %}" class="add-to-list-form">
+                {% csrf_token %}
+                <label for="add-to-list-select">List</label>
+                <select id="add-to-list-select" name="list" required>
+                    {% for lst in my_lists %}
+                        <option value="{{ lst.pk }}">{{ lst.name }}{% if lst.kind == "SHOPPING" %} (shopping){% endif %}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn" hx-disabled-elt="this">Add</button>
+            </form>
+        {% else %}
+            <p class="text-muted">You have no lists yet.
+                <a href="{% url 'lists:create' %}">Create one</a>.</p>
+        {% endif %}
+    </div>
+</details>
+{% endwith %}
