@@ -45,7 +45,11 @@ Report to the user:
 3. The `pytest` summary line and `ruff` result from the agent.
 4. Whether a `.review-findings.md` was consumed and deleted, or none existed.
 5. Any deviation from `design.md`.
-6. The next step: `/p2p-task-test $1` in a fresh session.
+6. Anything the agent noticed that the plan files do not cover. Do not leave this in chat —
+   record each item per `p2p-task.md`'s **Recording findings** section (a `tasks.md`
+   sub-note for this task, a future task's `design.md` or `Plan/BACKLOG.md` otherwise). Ask
+   the user if the right home is unclear.
+7. The next step: `/p2p-task-test $1` in a fresh session.
 
 **Do not** run the tester or reviewer, **do not** touch `Plan/MILESTONES.md` or
 `Plan/ARCHITECTURE.md`, and **do not** commit anything.

@@ -30,21 +30,32 @@ Wait for it to finish.
 
 ## After it finishes — stop here
 
+**First, whatever the verdict: record every finding that will not be actioned in the next
+dev pass.** Read `p2p-task.md`'s **Recording findings — nothing lives only in chat** section
+and follow it. Weak-but-passing tests, coverage the tester flagged as thin but not
+FAIL-worthy, deterministic-seed nits — each gets triaged into a file (`.review-findings.md`
+for address-now, a `tasks.md` sub-note for later-this-task, a future task's `design.md` or
+`Plan/BACKLOG.md` for later tasks). Make the obvious calls yourself; ask the user for any
+you are unsure about.
+
 **If the tester returned PASS:**
 
-- Confirm `Plan/<task>/.review-findings.md` no longer exists (the tester deletes it on PASS;
-  delete it yourself if it lingers).
-- Tell the user plainly: **the tester approved task `$1`.** Include the coverage table and note
-  any test the tester fixed. Write no other files.
+- The tester deletes `Plan/<task>/.review-findings.md` only if it raised nothing at all. If
+  non-blocking observations remain in it, triage them per above, then delete the file
+  yourself once every one has a permanent home. Confirm it is gone.
+- Tell the user plainly: **the tester approved task `$1`.** Include the coverage table, note
+  any test the tester fixed, and list each non-blocking observation with its disposition.
 - Next step: `/p2p-task-review $1` in a fresh session.
 
 **If the tester returned FAIL:**
 
 - The tester has written the numbered work list to `Plan/<task>/.review-findings.md`. Leave it
   in place — it is the handoff to the next dev session.
-- Report to the user: the verdict, the `pytest` summary, the coverage gaps, and the weak tests.
+- Report to the user: the verdict, the `pytest` summary, the coverage gaps, the weak tests,
+  and the disposition of any non-blocking observations.
 - Next step: `/p2p-task-dev $1` in a fresh session — the dev agent will pick up
   `.review-findings.md` automatically.
 
 Either way: **do not** touch `Plan/MILESTONES.md` or `Plan/ARCHITECTURE.md`, **do not** run the
-reviewer, and **do not** commit.
+reviewer, and **do not** commit. (Recording findings into `tasks.md` / `design.md` /
+`Plan/BACKLOG.md` is expected and does not count as a design change.)

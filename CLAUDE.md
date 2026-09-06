@@ -83,6 +83,17 @@ All work is driven by the documents in `Plan/`.
    iteration history.
 7. If the design turns out to be wrong, **stop and say so**. Do not silently deviate from the
    plan files; update them (with permission) so the next session inherits the truth.
+8. **Every tester or reviewer finding gets recorded before the session ends — nothing lives
+   only in chat.** The pipeline stages run in separate clean sessions; a non-blocking
+   suggestion that is only spoken is lost the moment the session clears. Blocking findings
+   already go to `Plan/<task>/.review-findings.md`. Non-blocking findings must each be
+   triaged into exactly one home: *address now* → `.review-findings.md`; *later in this
+   task* → a `tasks.md` sub-note on the owning subtask; *a future task* → that task's
+   `design.md` (or `Plan/BACKLOG.md` if no task owns it yet); *genuinely no action* → one
+   line in the handoff report and, if it is an accepted deviation from `design.md`, the
+   `ARCHITECTURE.md` decision log. Make the call yourself where it is clear; ask the owner
+   when it is not. This is spelled out for the pipeline commands in
+   `.claude/commands/p2p-task.md`.
 
 ## 5. Branching
 

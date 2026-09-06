@@ -25,7 +25,7 @@ class MealPlanProfile(models.Model):
     # gear 2
     dish_template = models.CharField(choices=DishTemplate.choices, default=BALANCED)
     # gear 3
-    source_scope = models.CharField(choices=SourceScope.choices, default=MINE_AND_SHARED)
+    source_scope = models.CharField(choices=SourceScope.choices, default=SHARED)  # MINE / SHARED / PUBLIC
     # gear 4
     tag_limits = models.JSONField(default=dict)                   # {"chicken": 1}
     # gear 5
@@ -114,7 +114,10 @@ class PlanResult:
 - For `BALANCED`, prefer dishes whose component roles cover protein + carb + vegetable; if none
   qualify, fall back to composing a dish from three separate recipes (below).
 - For `ONE_POT`, prefer dishes containing an `ONE_POT`-role recipe.
-- For `MIX`, alternate per the RNG.
+- For `MIX`, alternate per the RNG. *(Implemented 08.4 rework: per-slot alternation between a
+  `BALANCED` lean and a `ONE_POT` lean, starting phase drawn from the RNG. Each lean is a
+  preference with fallback to any dish — unlike strict `BALANCED`, which has no fallback. If a
+  finer definition was intended, revisit in 08.9+.)*
 - Weighted-random pick, then decrement budgets and mark the dish used.
 
 **4. Backtrack** — if a slot has no candidates, undo the previous slot's choice and retry with

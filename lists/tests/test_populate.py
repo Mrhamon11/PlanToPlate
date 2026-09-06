@@ -5,6 +5,7 @@ manual lines, and must be scoped to its own plan.
 
 from __future__ import annotations
 
+import datetime
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -25,7 +26,13 @@ def shopping_list(make_list, alice):
 def plan(alice):
     from planner.models import MealPlan
 
-    return MealPlan.objects.create(owner=alice, name="This week")
+    return MealPlan.objects.create(
+        owner=alice,
+        name="This week",
+        start_date=datetime.date(2026, 1, 5),
+        days=7,
+        seed=1,
+    )
 
 
 def test_populate_adds_flattened_ingredients(
@@ -140,8 +147,12 @@ def test_regeneration_scoped_to_source_plan(
 ):
     from planner.models import MealPlan
 
-    plan_a = MealPlan.objects.create(owner=alice, name="A")
-    plan_b = MealPlan.objects.create(owner=alice, name="B")
+    plan_a = MealPlan.objects.create(
+        owner=alice, name="A", start_date=datetime.date(2026, 1, 5), days=7, seed=1
+    )
+    plan_b = MealPlan.objects.create(
+        owner=alice, name="B", start_date=datetime.date(2026, 1, 5), days=7, seed=2
+    )
     onion = make_ingredient("Onion")
     garlic = make_ingredient("Garlic")
     dish_a = dish_with_ingredients("A dish", {onion: (Decimal("200"), gram)}, owner=alice)

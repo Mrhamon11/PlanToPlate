@@ -22,6 +22,7 @@ urlpatterns = [
     path("ingredients/", include("catalog.urls")),
     path("recipes/", include("recipes.urls")),
     path("lists/", include("lists.urls")),
+    path("planner/", include("planner.urls")),
     path("", include("meals.urls")),
     path("", include("core.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

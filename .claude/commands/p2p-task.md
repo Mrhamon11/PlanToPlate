@@ -131,8 +131,39 @@ for a large or security-sensitive task.
   still failing and hand it to the user; a loop that cannot converge in three passes has a
   problem in the plan files, not in the code.
 
-An approving tester or reviewer deletes `.review-findings.md`. Confirm it is gone before
-Handoff — it must never reach a commit.
+An approving tester or reviewer deletes `.review-findings.md` **only when it raised no
+findings of any kind**. If it approved/passed but raised non-blocking findings, it leaves
+them in the file for you to triage (see below). Confirm the file is gone before Handoff —
+it must never reach a commit.
+
+## Recording findings — nothing lives only in chat
+
+The tester and reviewer run in their own clean sessions. A suggestion they only *say* is
+gone the moment that session clears, and the next dev session never sees it. So **every
+finding either agent raises — blocking or not — must land in a file before this session
+ends.**
+
+- **Blocking findings** are already handled: the agent appends them to
+  `Plan/<task>/.review-findings.md` and the next `p2p-dev` works them.
+- **Non-blocking findings** are yours to triage. Take each one and put it in exactly one
+  home:
+
+  | Disposition | Where it goes |
+  |---|---|
+  | Address in the current rework pass | `Plan/<task>/.review-findings.md`, under a `## Non-blocking — address in this rework pass` heading (the dev treats the whole file as its work list) |
+  | Defer to a later subtask of *this* task | A `*Carried-forward review finding:*` sub-note on the owning subtask in `Plan/<task>/tasks.md` — the dev reads it when it reaches that subtask |
+  | Defer to a *future* task | A `## Carried-in findings` section in that task's `Plan/<other-task>/design.md`; if no task owns it, a line in `Plan/BACKLOG.md` (create it if absent) |
+  | Genuinely no action / accepted as-is | One line in your Handoff report. If it is an accepted deviation from `design.md`, it also goes to the `ARCHITECTURE.md` decision log at task completion (needs owner approval, per `CLAUDE.md` §2) |
+
+- **Make the call yourself when the right bucket is obvious.** When it is not — the finding
+  could reasonably be "now" or "later", or you are unsure a future task owns it — **ask the
+  owner** with a short questionnaire before finishing. Do not guess and do not skip it.
+- `tasks.md` and `design.md` edits for recording findings this way are allowed without a
+  separate permission ask — recording is the point. Editing them to *change the design* is
+  not; that still stops for the owner per `CLAUDE.md` §4.7.
+
+Editing `Plan/MILESTONES.md` and `Plan/ARCHITECTURE.md` still waits for Handoff and owner
+approval.
 
 ## Handoff — the pipeline always ends with the human
 
@@ -141,7 +172,9 @@ When the loop converges, **stop and notify the user for approval.** Present:
 1. **Task `$1` is ready for your review** — one line on what now works that did not before.
 2. Every file created or modified, grouped by area.
 3. The final pytest summary line and ruff result.
-4. Non-blocking suggestions the reviewer raised that you did not action.
+4. Every non-blocking finding the tester or reviewer raised, each with the disposition you
+   gave it per **Recording findings** above (which file it landed in, or why it needs no
+   action).
 5. Any deviation from `design.md`, flagged clearly.
 6. How to see it working — the URL to visit or the command to run.
 

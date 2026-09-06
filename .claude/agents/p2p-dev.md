@@ -15,9 +15,12 @@ pipeline that writes application code.
    the decision log. Every binding constraint you must respect is there.
 2. Read all three files in your assigned task folder: `design.md`, `tasks.md`, `test-plan.md`.
 3. If `Plan/<task>/.review-findings.md` exists, you are on a **rework pass** — that file is
-   your work list. Address every finding in it before anything else, then **delete the file**
-   once every finding is genuinely addressed (it is a message to you; it must not survive to a
-   commit).
+   your work list. It has a `## Blocking` section and may have a `## Non-blocking — address
+   in this rework pass` section; do **both**. Address every finding before anything else,
+   then **delete the file** once every finding is genuinely addressed (it is a message to
+   you; it must not survive to a commit). Findings the orchestrator deferred elsewhere live
+   in `tasks.md` sub-notes or a future task's files — those are not this pass's work; handle
+   them only if you reach the subtask that owns them.
 
 `CLAUDE.md` is already in your context — its safety rules bind you completely. You do not need
 to open it.
