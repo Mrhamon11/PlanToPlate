@@ -1,0 +1,10 @@
+{% comment %}
+The sticky "N of M items" progress counter (07.10). Rendered once in the shopping detail
+header, and re-rendered out-of-band by ListItemCheckView after every check toggle so the count
+stays live without a page reload. hx-swap-oob is inert on the first full page load.
+
+Context: progress — {checked, total}.
+{% endcomment %}
+<p id="shopping-progress" class="shopping-progress" hx-swap-oob="true" role="status" aria-live="polite">
+    {{ progress.checked }} of {{ progress.total }} item{{ progress.total|pluralize }}
+</p>

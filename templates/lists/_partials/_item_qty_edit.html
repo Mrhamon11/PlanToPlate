@@ -1,0 +1,33 @@
+{% comment %}
+Inline quantity + unit override for one list item (07.23). Owner-only.
+
+An aggregated line ("2 cups chicken breast") is often not a buyable amount, so the number is
+the owner's to correct — the app assumes nothing. Clearing the quantity is allowed (a bare
+"chicken breast" line); a unit with no quantity is refused by lists.services.update_item.
+
+Posts to lists:item-edit. On a shopping list (hx=True) HTMX swaps the whole row so the
+displayed quantity updates in place; everywhere else the form is a plain submit that reloads.
+
+Context: item (decorated by annotate_display), list, units (Unit queryset), csrf_token,
+page_number? (kept so a no-JS save stays on the shopper's page), hx? (truthy on a shopping
+list), unit_field_id (the id for the <select>, so its <label for=...> resolves).
+{% endcomment %}
+<details class="item-qty-edit">
+    <summary class="btn btn-icon" aria-label="Edit quantity for {{ item.display_label }}">&#9998;</summary>
+    <form class="item-qty-edit-form" method="post"
+          action="{% url 'lists:item-edit' list.pk item.pk %}"
+          {% if hx %}hx-post="{% url 'lists:item-edit' list.pk item.pk %}" hx-target="#shopping-item-{{ item.pk }}" hx-swap="outerHTML"{% endif %}>
+        {% csrf_token %}
+        {% if page_number and page_number > 1 %}<input type="hidden" name="page" value="{{ page_number }}">{% endif %}
+        <span class="field">
+            <label for="qty-{{ item.pk }}">Quantity</label>
+            <input class="item-qty-input" type="number" id="qty-{{ item.pk }}" name="quantity"
+                   step="any" min="0" inputmode="decimal" value="{{ item.quantity|floatformat:'-3' }}">
+        </span>
+        <span class="field">
+            <label for="{{ unit_field_id }}">Unit</label>
+            {% include "_partials/_unit_select.html" with units=units name="unit" selected=item.unit_id field_id=unit_field_id %}
+        </span>
+        <button type="submit" class="btn" hx-disabled-elt="this">Save</button>
+    </form>
+</details>

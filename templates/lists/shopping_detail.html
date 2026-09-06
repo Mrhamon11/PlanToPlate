@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}{{ list.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+<article class="shopping-list">
+    <div class="page-header">
+        <h1>{{ list.name }}</h1>
+        {% include "_partials/_ownership_badge.html" with object=list %}
+    </div>
+
+    <div class="shopping-sticky">
+        {% include "lists/_partials/_shopping_progress.html" %}
+    </div>
+
+    {% if is_owner %}
+        <form class="shopping-quick-add" method="post" action="{% url 'lists:item-add' list.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="kind" value="text">
+            {% if page_obj.number > 1 %}<input type="hidden" name="page" value="{{ page_obj.number }}">{% endif %}
+            <label for="quick-add" class="visually-hidden">Add an item</label>
+            <input type="text" id="quick-add" name="text" placeholder="Add an item" autocomplete="off" maxlength="500">
+            <button type="submit" class="btn btn-primary" hx-disabled-elt="this">Add</button>
+        </form>
+
+        {% include "lists/_partials/_shopping_actions.html" %}
+    {% endif %}
+
+    {% for aisle in aisles %}
+        <section class="shopping-aisle">
+            <h2>{{ aisle.name }}</h2>
+            <ul class="shopping-items" role="list">
+                {% for item in aisle.items %}
+                    {% include "lists/_partials/_shopping_item.html" with item=item list=list is_owner=is_owner units=units page_number=page_obj.number csrf_token=csrf_token only %}
+                {% endfor %}
+            </ul>
+        </section>
+    {% empty %}
+        {% include "_partials/_empty_state.html" with title="This list is empty" message="Add an item above, or add a dish from its page." %}
+    {% endfor %}
+
+    {% if is_paginated %}
+        {% include "_partials/_pagination.html" with page_obj=page_obj %}
+    {% endif %}
+
+    <p><a href="{% url 'lists:index' %}">&larr; All lists</a></p>
+</article>
+
+<div id="modal"></div>
+{% endblock %}

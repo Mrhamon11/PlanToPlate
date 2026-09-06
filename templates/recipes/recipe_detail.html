@@ -121,6 +121,7 @@
         {% endif %}
         <a class="btn" href="{% url 'recipes:recipe-print' recipe.pk %}">Print</a>
         {% include "recipes/_partials/_add_to_book.html" with recipe=recipe %}
+        {% include "_partials/_add_to_list.html" with object=recipe target_kind="recipe" %}
     </div>
 
     <p><a href="{% url 'recipes:recipe-list' %}">&larr; All recipes</a></p>

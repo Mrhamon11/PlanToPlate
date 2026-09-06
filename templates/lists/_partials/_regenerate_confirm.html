@@ -1,0 +1,33 @@
+{% comment %}
+Confirm before clearing a shopping list's generated items (07.13). Loaded via hx-get into
+#modal for JS users; the same fragment is the body of regenerate_confirm.html for the no-JS
+fallback. Mirrors _remove_from_book_confirm.html.
+
+It WARNS when any generated item is already checked, because losing shopping progress mid-trip
+is a genuinely bad surprise (design.md, "Edge cases": "the UI must warn before regenerating a
+list with checked items").
+
+Context: list, generated_count, checked_count, regenerate_url, cancel_url.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="regenerate-title">
+        <h2 id="regenerate-title">Clear generated items?</h2>
+        <p>
+            This removes the {{ generated_count }} generated item{{ generated_count|pluralize }}
+            on &ldquo;{{ list.name }}&rdquo;. Items you added by hand are kept.
+        </p>
+        {% if checked_count %}
+            <p class="alert alert-warning" role="alert">
+                <strong>{{ checked_count }} generated item{{ checked_count|pluralize }} {{ checked_count|pluralize:"is,are" }} already checked off.</strong>
+                Clearing now loses that shopping progress — it cannot be undone.
+            </p>
+        {% endif %}
+        <form method="post" action="{{ regenerate_url }}">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-danger" hx-disabled-elt="this">Clear generated items</button>
+            </div>
+        </form>
+    </div>
+</div>

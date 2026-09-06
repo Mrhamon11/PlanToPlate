@@ -1,0 +1,37 @@
+{% comment %}
+The kind-grouped list index (07.9). A fragment — never extends base.html.
+
+Only line COUNTS are shown here, never item content, so nothing on this screen can leak an
+invisible recipe / dish / ingredient (design.md, "Security notes"). Content and provenance are
+resolved through the visibility caches only on a detail page.
+
+Context: groups — a list of lists.services.KindGroup.
+{% endcomment %}
+{% for group in groups %}
+    <section class="list-kind-group">
+        <h2>{{ group.label }}</h2>
+        <ul class="recipe-list" role="list">
+            {% for lst in group.lists %}
+                <li class="recipe-card">
+                    <a class="recipe-card-main" href="{{ lst.get_absolute_url }}">
+                        <span class="recipe-name">
+                            {{ lst.name }}
+                            {% if lst.is_default_shopping_list %}<span class="badge badge-system">Default</span>{% endif %}
+                        </span>
+                        <span class="text-muted">
+                            {{ lst.item_total }} item{{ lst.item_total|pluralize }}
+                            {% if group.kind == "SHOPPING" and lst.item_total %}
+                                &middot; {{ lst.checked_total }} checked
+                            {% endif %}
+                        </span>
+                    </a>
+                    <div class="recipe-card-meta">
+                        {% include "_partials/_ownership_badge.html" with object=lst %}
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+{% empty %}
+    {% include "_partials/_empty_state.html" with title="No lists yet" message="Make a shopping list, a menu, or just a list of ideas." action_url="/lists/new/" action_label="New list" %}
+{% endfor %}

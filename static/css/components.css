@@ -870,3 +870,220 @@ button:disabled {
 .typeahead-empty {
   padding: var(--space-2);
 }
+
+/* --------------------------------------------------------------------------------------------
+   Lists & shopping (Plan/07-Lists-And-Shopping, 07.9-07.13). Layout only — colour comes from
+   the app.css tokens. Every tappable row is at least var(--tap-target) tall (task 02 rule).
+   ------------------------------------------------------------------------------------------ */
+
+.list-kind-group {
+  margin-block-start: var(--space-5);
+}
+
+/* --- Shopping list detail --- */
+
+.shopping-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-bg);
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.shopping-progress {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.shopping-quick-add {
+  display: flex;
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+}
+
+.shopping-quick-add input {
+  flex: 1 1 auto;
+}
+
+.shopping-aisle {
+  margin-block-start: var(--space-4);
+}
+
+.shopping-aisle h2 {
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-muted);
+}
+
+.shopping-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.shopping-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.shopping-item--generated {
+  border-inline-start: 3px solid var(--color-info);
+}
+
+.shopping-item--checked .shopping-item-label {
+  text-decoration: line-through;
+  color: var(--color-muted);
+}
+
+.shopping-item form {
+  margin: 0;
+  display: flex;
+}
+
+.shopping-item form:first-child {
+  flex: 1 1 auto;
+}
+
+/* The whole row is the check target — never a bare 20px checkbox (task 02 tap-target rule). */
+.shopping-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.shopping-check-box {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.shopping-check-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shopping-item-remove button {
+  height: 100%;
+}
+
+/* --- Inline quantity + unit edit (07.23) --- */
+
+/* Collapsed: a single tap-target toggle sitting with the row's other controls. Open: the
+   edit form drops onto its own full-width line below the row (both parents are flex-wrap). */
+.item-qty-edit {
+  margin: 0;
+  align-self: center;
+}
+
+.item-qty-edit > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.item-qty-edit > summary::-webkit-details-marker {
+  display: none;
+}
+
+.item-qty-edit[open] {
+  flex: 1 1 100%;
+}
+
+.item-qty-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.item-qty-edit-form .field {
+  margin-bottom: 0;
+}
+
+.item-qty-input {
+  width: 6rem;
+  min-height: var(--tap-target);
+  padding: var(--space-2);
+}
+
+/* --- Generic list detail --- */
+
+.list-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+  margin-block: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border-radius: var(--radius);
+}
+
+.generic-list-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.generic-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.generic-list-item--hidden {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.generic-list-label {
+  flex: 1 1 auto;
+}
+
+.generic-list-controls {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.generic-list-controls form {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0;
+}

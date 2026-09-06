@@ -1,0 +1,41 @@
+{% comment %}
+The shopping-detail action bar (07.19, 07.20, 07.24): Check all / Uncheck all,
+"Clear checked (N)", Clear all, Clear generated items.
+
+Rendered once in the shopping detail on a full page load (behind the caller's {% if is_owner %}
+guard), and re-rendered out-of-band by ListItemCheckView after every check toggle so
+"Clear checked (N)" and the Check all / Uncheck all toggle stay live without a page reload.
+hx-swap-oob is inert on the first full page load; the check view only renders this for owners.
+
+Context: list, progress — {checked, total}, has_generated, csrf_token.
+{% endcomment %}
+<div class="detail-actions" id="shopping-actions" hx-swap-oob="true">
+    {% if progress.total %}
+        <form method="post" action="{% url 'lists:check-all' list.pk %}">
+            {% csrf_token %}
+            {% if progress.checked == progress.total %}
+                <input type="hidden" name="is_checked" value="false">
+                <button type="submit" class="btn" hx-disabled-elt="this">Uncheck all</button>
+            {% else %}
+                <input type="hidden" name="is_checked" value="true">
+                <button type="submit" class="btn" hx-disabled-elt="this">Check all</button>
+            {% endif %}
+        </form>
+    {% endif %}
+    {% if progress.checked %}
+        <form method="post" action="{% url 'lists:clear-checked' list.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn" hx-disabled-elt="this">Clear checked ({{ progress.checked }})</button>
+        </form>
+    {% endif %}
+    {% if progress.total %}
+        <a class="btn btn-danger" href="{% url 'lists:clear-all-confirm' list.pk %}"
+           hx-get="{% url 'lists:clear-all-confirm' list.pk %}"
+           hx-target="#modal" hx-swap="innerHTML">Clear all</a>
+    {% endif %}
+    {% if has_generated %}
+        <a class="btn" href="{% url 'lists:regenerate-confirm' list.pk %}"
+           hx-get="{% url 'lists:regenerate-confirm' list.pk %}"
+           hx-target="#modal" hx-swap="innerHTML">Clear generated items</a>
+    {% endif %}
+</div>

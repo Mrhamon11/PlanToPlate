@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}New list — PlanToPlate{% endblock %}
+
+{% block content %}
+<h1>New list</h1>
+
+<form method="post" class="ingredient-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% include "_partials/_form_field.html" with field=form.name %}
+    {% include "_partials/_form_field.html" with field=form.kind %}
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create list</button>
+        <a class="btn" href="{% url 'lists:index' %}">Cancel</a>
+    </div>
+</form>
+{% endblock %}

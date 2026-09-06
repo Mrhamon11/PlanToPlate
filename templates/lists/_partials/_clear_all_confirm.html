@@ -1,0 +1,27 @@
+{% comment %}
+Confirm before deleting EVERY item on a list (07.19). Loaded via hx-get into #modal for JS
+users; the same fragment is the body of clear_all_confirm.html for the no-JS fallback. Mirrors
+_regenerate_confirm.html and _confirm_delete.html.
+
+Distinct from "Clear checked" (removes only ticked items) and "Clear generated items" (keeps
+hand-added lines): this empties the whole list, generated and manual alike, and cannot be
+undone.
+
+Context: list, item_count, clear_all_url, cancel_url.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="clear-all-title">
+        <h2 id="clear-all-title">Clear the whole list?</h2>
+        <p>
+            This deletes every item on &ldquo;{{ list.name }}&rdquo; — {{ item_count }}
+            item{{ item_count|pluralize }}, generated and hand-added alike. It cannot be undone.
+        </p>
+        <form method="post" action="{{ clear_all_url }}">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-danger" hx-disabled-elt="this">Clear all items</button>
+            </div>
+        </form>
+    </div>
+</div>

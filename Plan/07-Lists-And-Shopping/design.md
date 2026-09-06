@@ -63,6 +63,17 @@ someone's shopping list. The item survives with its text/quantity, and the UI re
 "(deleted recipe)". Losing a line off a list you are standing in a shop holding is worse than
 seeing a tombstone.
 
+**Tombstone reconciliation (07.1 review, finding 1).** The check constraint and `SET_NULL`
+collide for a *content-only* item — no `text`, one FK — which is the normal output of
+`add_recipe_to_list`, of a dish reference on a non-shopping list, and of **every** line
+`populate_shopping_list` writes. The instant its one FK is nulled the constraint fails, the
+delete transaction aborts, and the caller gets a 500. Resolution: a `pre_delete` receiver in
+`lists/signals.py`, on Recipe / Dish / Ingredient, writes a fallback tombstone `text`
+(`"(deleted recipe)"` / `"(deleted dish)"` / `"(deleted ingredient)"`) onto every referencing
+content-only item *before* the collector nulls the FK. The row stays constraint-valid, the
+delete succeeds, and the check constraint is kept. Items that already carry their own `text`
+are left untouched.
+
 `PROTECT` on `unit`, matching every other model.
 
 ### `source` and `generated_from`
@@ -85,6 +96,12 @@ The requirement: generated ingredients go to a designated shopping list, created
 handles the creation. A `UniqueConstraint` on `(owner, is_default_shopping_list)` filtered to
 `True` guarantees at most one per user — the alternative, checking in application code, drifts
 the first time two requests race.
+
+**`generated_from` → `planner.MealPlan` (07.2 review).** That model does not exist until task
+08, but Django resolves lazy FK targets at system-check time, so a bare string reference fails
+`manage.py check`. Task 07 ships a **minimal real stub** — `planner.MealPlan(OwnedModel)` with
+one `name` field — carrying a docstring that task 08 must replace it with the real generator
+model and re-decide its `contains_owned_children` / sharing-cascade posture.
 
 ## Services — `lists/services.py`
 
@@ -122,9 +139,16 @@ because silently merging a user's own line into a generated one is surprising.
 - **Grouping** — items grouped by the ingredient's primary tag (produce, dairy, meat, pantry)
   so the list follows the shape of a supermarket. Fall back to alphabetical when untagged.
 - **Sticky totals** — "12 of 20 items."
-- **Clear checked** — bulk removal.
-- **Provenance** — a generated item shows what it came from ("from Chicken Parm"), which is
-  what makes a surprising line understandable rather than suspicious.
+- **Clear checked** / **Check all** / **Uncheck all** / **Clear all** — bulk operations.
+  "Check all" toggles to "Uncheck all" once every item is checked. "Clear all" (behind a
+  confirm) deletes every item.
+- **Provenance** — a `GENERATED` item still *records* its single contributing dish on
+  `ListItem.dish` (07.5), but as of the 2026-09-05 dev-test round the shopping/generic list UI
+  **does not render a "from …" label**. In task 07's flow the user hand-adds the dish seconds
+  earlier and does not need reminding; the label's real payoff — disambiguating a surprising
+  line on a week's worth of auto-generated groceries — arrives with the meal planner. **Task 08
+  decides how to surface provenance** on a planner-generated list (a caption, a tooltip, a
+  group header). Until then it is data-only.
 
 ## API
 
@@ -145,10 +169,12 @@ because silently merging a user's own line into a generated one is surprising.
 
 - **List index** — grouped by kind, item counts, a pinned default shopping list.
 - **Shopping list detail** — the most-used screen in the app on a phone: large tap targets,
-  aisle grouping, sticky progress, one-tap check, quick-add at the top, provenance as
-  secondary text, and generated items visually distinguished from manual ones.
+  aisle grouping, sticky progress, one-tap check, quick-add at the top, bulk actions
+  (clear checked / check-all-toggles-uncheck-all / clear all), and generated items visually
+  distinguished from manual ones. (No "from …" provenance label — see "Shopping list
+  behaviour" above.)
 - **Generic list detail** — mixed items with type icons, inline add of text/recipe/dish, up/down
-  reordering.
+  reordering, and a "Clear all" bulk action.
 - **"Add to list ▾"** on recipe and dish detail pages.
 
 ## Edge cases
@@ -157,9 +183,20 @@ because silently merging a user's own line into a generated one is surprising.
 - Checking an item then regenerating: **the checked state of a replaced generated item is
   lost.** Acceptable and documented — but the UI must warn before regenerating a list with
   checked items, because losing your shopping progress mid-trip is a genuinely bad surprise.
-- An item with a quantity but no unit (a bare "3 lemons"): allowed; `unit` is nullable.
+- **Editing a generated line's quantity, then regenerating:** the manual quantity edit is
+  **also lost** — same accepted trade-off as checked state, and covered by the same
+  regenerate warning. An edit does not change the line's `source`. Whether an override should
+  survive regeneration is a task 08 decision.
+- An item with a quantity but no unit (a bare "3 lemons"): allowed; `unit` is nullable. The
+  user can **edit `quantity` and `unit` on any line** (07.23) — an aggregated line is often
+  not a buyable amount, so the number is theirs to correct; the app assumes nothing.
 - An item with neither text nor any FK: rejected by the check constraint.
-- Deleting a recipe referenced by list items: `SET_NULL`, item survives as a tombstone.
+- Deleting a recipe/dish/ingredient referenced by list items: `SET_NULL`, item survives as a
+  tombstone. A `pre_delete` receiver (`lists/signals.py`) stamps fallback tombstone `text` onto
+  content-only items first so the has-content check constraint still holds — see "Models".
+- Adding a dish scheduled twice in a plan: `populate_shopping_list` aggregates it to 2×, the
+  same as calling `add_dish_to_list` twice. No dish-level dedupe — a repeated dinner needs
+  double the groceries (07.1 review, finding 2).
 - A list shared with another user: they see it read-only and **cannot check items off**.
   Collaborative editing is explicitly out of scope — task 03 grants read, not write, and a
   shared shopping list two people both tick is a different feature with concurrency questions
@@ -173,3 +210,13 @@ because silently merging a user's own line into a generated one is surprising.
   as task 06. Attaching a guessed recipe ID to your own list and reading it back is the attack.
 - `populate_shopping_list` must verify the actor can see every dish it is asked to expand.
 - Item counts and previews on the list index must not leak invisible content.
+
+**Deferred to task 08** (the real planner caller is a prerequisite — see `tasks.md` carry-over):
+
+- `populate_shopping_list` flattens dishes inline and does not thread `viewer` through to
+  filter *component* recipes by `.visible_to()` the way `add_dish_to_list` does. Harmless while
+  `actor = lst.owner` with no API surface; must be reconciled when task 08 calls it with a
+  distinct actor.
+- The `(ingredient_id, unit_id)` merge key in `add_dish_to_list` is unstable under
+  friendly-unit promotion — two calls can split one ingredient across two lines. Recoverable
+  via `merge-duplicates`; the real fix normalises to base units for the upsert key.

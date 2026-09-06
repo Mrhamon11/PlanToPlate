@@ -1,0 +1,62 @@
+{% comment %}
+One shopping-list row (07.10). Rendered inside an aisle group on the full page, and returned
+alone by ListItemCheckView after a check toggle (with the progress counter and the
+action bar refreshed out-of-band — see the {% if progress %} block at the end).
+
+One-tap check: the whole 44px row is the button (task 02 tap-target rule). A generated line
+carries `shopping-item--generated` — the only thing that marks it apart from a manual line.
+No "from ‹Dish›" caption is rendered: the contributing dish is still recorded on the item as
+data, but task 08 owns bringing a provenance display back (2026-09-05 dev-test decision, 07.21).
+An invisible reference renders as a neutral placeholder, never its real name (design.md,
+"Security notes").
+
+Context: item (decorated by lists.services.annotate_display), list, is_owner, progress?,
+has_generated? (with progress, for the OOB action-bar refresh), page_number? (the current
+paginator page, so a no-JS check keeps the shopper on their page), csrf_token (passed
+explicitly by the {% include ... only %} on the full page so the no-JS remove form still
+renders a token — 07.15).
+{% endcomment %}
+<li id="shopping-item-{{ item.pk }}"
+    class="shopping-item{% if item.is_generated %} shopping-item--generated{% endif %}{% if item.is_checked %} shopping-item--checked{% endif %}">
+    {% if is_owner %}
+        <form method="post" action="{% url 'lists:item-check' list.pk item.pk %}"
+              hx-post="{% url 'lists:item-check' list.pk item.pk %}"
+              hx-target="#shopping-item-{{ item.pk }}" hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="hidden" name="is_checked" value="{% if item.is_checked %}false{% else %}true{% endif %}">
+            {% if page_number and page_number > 1 %}<input type="hidden" name="page" value="{{ page_number }}">{% endif %}
+            <button type="submit" class="shopping-check" hx-disabled-elt="this"
+                    aria-pressed="{% if item.is_checked %}true{% else %}false{% endif %}">
+                <span class="shopping-check-box" aria-hidden="true">{% if item.is_checked %}&#10003;{% endif %}</span>
+                <span class="shopping-check-body">
+                    <span class="shopping-item-label">
+                        {% if item.quantity is not None %}<span class="component-qty">{{ item.quantity|floatformat:"-3" }}{% if item.unit %} {{ item.unit.abbrev }}{% endif %}</span>{% endif %}
+                        {{ item.display_label }}
+                    </span>
+                </span>
+            </button>
+        </form>
+        <form method="post" action="{% url 'lists:item-delete' list.pk item.pk %}" class="shopping-item-remove">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-icon btn-danger" aria-label="Remove {{ item.display_label }}"
+                    hx-disabled-elt="this">&times;</button>
+        </form>
+        {% with pk_str=item.pk|stringformat:"s" %}
+            {% include "lists/_partials/_item_qty_edit.html" with item=item list=list units=units page_number=page_number hx=True unit_field_id="unit-"|add:pk_str csrf_token=csrf_token %}
+        {% endwith %}
+    {% else %}
+        <span class="shopping-check" aria-disabled="true">
+            <span class="shopping-check-box" aria-hidden="true">{% if item.is_checked %}&#10003;{% endif %}</span>
+            <span class="shopping-check-body">
+                <span class="shopping-item-label">
+                    {% if item.quantity is not None %}<span class="component-qty">{{ item.quantity|floatformat:"-3" }}{% if item.unit %} {{ item.unit.abbrev }}{% endif %}</span>{% endif %}
+                    {{ item.display_label }}
+                </span>
+            </span>
+        </span>
+    {% endif %}
+</li>
+{% if progress %}
+    {% include "lists/_partials/_shopping_progress.html" %}
+    {% include "lists/_partials/_shopping_actions.html" %}
+{% endif %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{{ list.name }} — PlanToPlate{% endblock %}
+
+{% block content %}
+<article class="generic-list">
+    <div class="page-header">
+        <h1>{{ list.name }}</h1>
+        {% include "_partials/_ownership_badge.html" with object=list %}
+    </div>
+
+    {% if is_owner %}
+        <form class="list-add-form" method="post" action="{% url 'lists:item-add' list.pk %}">
+            {% csrf_token %}
+            <div class="field">
+                <label for="add-kind">Add</label>
+                <select id="add-kind" name="kind">
+                    <option value="text">Free text</option>
+                    <option value="recipe">Recipe</option>
+                    <option value="dish">Dish</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="add-text">Text</label>
+                <input type="text" id="add-text" name="text" autocomplete="off" maxlength="500">
+            </div>
+            <div class="field">
+                <label for="add-recipe">Recipe</label>
+                <select id="add-recipe" name="recipe_ref">
+                    <option value="">—</option>
+                    {% for recipe in my_recipes %}<option value="{{ recipe.pk }}">{{ recipe.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="add-dish">Dish</label>
+                <select id="add-dish" name="dish_ref">
+                    <option value="">—</option>
+                    {% for dish in my_dishes %}<option value="{{ dish.pk }}">{{ dish.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" hx-disabled-elt="this">Add</button>
+        </form>
+        <p class="text-muted">A recipe or dish is added as a single reference — a shopping list expands a dish to its ingredients, a generic list keeps the reference.</p>
+    {% endif %}
+
+    <ul class="generic-list-items" role="list">
+        {% for item in items %}
+            <li class="generic-list-item{% if item.content_hidden %} generic-list-item--hidden{% endif %}">
+                <span class="generic-list-icon" aria-hidden="true">
+                    {% if item.recipe_id %}&#127859;{% elif item.dish_id %}&#127869;{% elif item.ingredient_id %}&#129387;{% else %}&#128221;{% endif %}
+                </span>
+                <span class="generic-list-label">
+                    {% if item.quantity is not None %}<span class="component-qty">{{ item.quantity|floatformat:"-3" }}{% if item.unit %} {{ item.unit.abbrev }}{% endif %}</span>{% endif %}
+                    {{ item.display_label }}
+                    {% if item.is_generated %}<span class="text-muted">— generated</span>{% endif %}
+                </span>
+                {% if is_owner %}
+                    {% if item.quantity is not None %}
+                        {% with pk_str=item.pk|stringformat:"s" %}
+                            {% include "lists/_partials/_item_qty_edit.html" with item=item list=list units=units unit_field_id="unit-"|add:pk_str csrf_token=csrf_token %}
+                        {% endwith %}
+                    {% endif %}
+                    <span class="generic-list-controls">
+                        <form method="post" action="{% url 'lists:item-move' list.pk item.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" name="direction" value="up" class="btn btn-icon" aria-label="Move {{ item.display_label }} up">&uarr;</button>
+                            <button type="submit" name="direction" value="down" class="btn btn-icon" aria-label="Move {{ item.display_label }} down">&darr;</button>
+                        </form>
+                        <form method="post" action="{% url 'lists:item-delete' list.pk item.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" aria-label="Remove {{ item.display_label }}">&times;</button>
+                        </form>
+                    </span>
+                {% endif %}
+            </li>
+        {% empty %}
+            {% include "_partials/_empty_state.html" with title="This list is empty" message="Add free text, a recipe, or a dish above." %}
+        {% endfor %}
+    </ul>
+
+    {% if is_owner %}
+        <div class="detail-actions">
+            {% if items %}
+                <a class="btn btn-danger" href="{% url 'lists:clear-all-confirm' list.pk %}"
+                   hx-get="{% url 'lists:clear-all-confirm' list.pk %}"
+                   hx-target="#modal" hx-swap="innerHTML">Clear all</a>
+            {% endif %}
+            <a class="btn btn-danger" href="{% url 'lists:delete' list.pk %}">Delete list</a>
+        </div>
+    {% endif %}
+
+    <p><a href="{% url 'lists:index' %}">&larr; All lists</a></p>
+</article>
+
+<div id="modal"></div>
+{% endblock %}
