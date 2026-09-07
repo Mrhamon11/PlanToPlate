@@ -142,6 +142,35 @@ def test_preview_writes_nothing(make_plan, dish_of, make_ingredient, alice):
     assert plan.shopping_list_id is None
 
 
+@pytest.mark.django_db(transaction=True)
+def test_generate_runs_the_flatten_outside_a_write_transaction(
+    make_plan, dish_of, make_ingredient, alice, monkeypatch
+):
+    """08.20 review — ``generate_shopping_list`` must not hold a write transaction across the
+    bounded flatten / aggregate / recipe-graph compute (same class as 08.19 R1 for
+    ``reroll_entry``; ARCHITECTURE §2). The flatten issues its reads with the connection not
+    in an atomic block."""
+    from django.db import connection
+
+    import lists.services as lists_services
+
+    onion = make_ingredient("Onion", owner=alice)
+    plan = make_plan(owner=alice)
+    _schedule(plan, [dish_of("Stew", onion, owner=alice)])
+
+    real_flatten = lists_services._flatten_dishes_to_lines
+    observed: dict[str, bool] = {}
+
+    def spy(*args, **kwargs):
+        observed["in_atomic_block"] = connection.in_atomic_block
+        return real_flatten(*args, **kwargs)
+
+    monkeypatch.setattr(lists_services, "_flatten_dishes_to_lines", spy)
+    generate_shopping_list(plan)
+
+    assert observed["in_atomic_block"] is False
+
+
 def test_aggregates_across_week(make_plan, dish_of, make_ingredient, alice):
     onion = make_ingredient("Onion", owner=alice)
     plan = make_plan(owner=alice)

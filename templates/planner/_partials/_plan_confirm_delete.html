@@ -1,0 +1,21 @@
+{% comment %}
+D39-style #modal confirmation before deleting a saved plan (B8). Loaded via hx-get into
+#modal for JS users, or rendered as the body of a full page for the no-JS fallback. The
+plan's entries cascade on delete; its generated shopping list is a separate object and is
+kept (D44).
+
+Context: plan, object_name, apply_url, cancel_url.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="plan-confirm-delete-title">
+        <h2 id="plan-confirm-delete-title">Delete &ldquo;{{ object_name }}&rdquo;?</h2>
+        <p>This cannot be undone. Any shopping list this plan generated is kept.</p>
+        <form method="post" action="{{ apply_url }}">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-danger" hx-disabled-elt="this">Delete plan</button>
+            </div>
+        </form>
+    </div>
+</div>

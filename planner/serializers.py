@@ -6,8 +6,10 @@ Three security rules the design turns on here:
    ``owner=request.user``; this serializer only ever injects ``owner`` from the request.
 2. **A plan never surfaces a dish the viewer cannot see.** ``MealPlanEntrySerializer`` filters
    every entry's ``dish`` through ``Dish.objects.visible_to(request.user)`` on write, and
-   tombstones the name to ``null`` on read — a shared plan must not leak the names of dishes
-   the recipient cannot open (``MealPlan.contains_owned_children = False``, D44).
+   tombstones the name to ``null`` on read. Sharing a plan *cascades* read to its scheduled
+   dishes (D44 re-decision, 08.20), so a freshly shared plan's recipient can see every dish —
+   but this tombstone still matters when a dish is unshared after the plan was, or the plan's
+   ``shared_with`` was edited directly.
 3. **``shopping_list`` is constrained to lists the requester owns.** Otherwise linking a
    victim's list id and regenerating would populate their list
    (``lists.services.generate_shopping_list`` checks visibility against ``lst.owner``).
@@ -185,6 +187,19 @@ class MealPlanEntrySerializer(serializers.ModelSerializer):
         from planner.services.compose import is_composed
 
         return obj.dish is not None and is_composed(obj.dish)
+
+    def update(
+        self, instance: MealPlanEntry, validated_data: dict[str, Any]
+    ) -> MealPlanEntry:
+        """A manual dish swap is a deliberate override, so it clears ``is_locked`` — the same
+        behaviour as the HTML ``PlanEntrySwapView`` (owner decision, 08 final rework). Only a
+        PATCH that actually changes ``dish`` touches the lock; one that sets ``is_locked``
+        explicitly, or only edits ``note``, leaves it alone.
+        """
+        dish_changed = "dish" in validated_data and validated_data["dish"] != instance.dish
+        if dish_changed and "is_locked" not in validated_data:
+            validated_data["is_locked"] = False
+        return super().update(instance, validated_data)
 
     def get_dish_name(self, obj: MealPlanEntry) -> str | None:
         if obj.dish is not None and obj.dish.pk is None:

@@ -31,7 +31,34 @@
         <fieldset class="profile-section">
             <legend>{{ group.title }}</legend>
             {% for field in group.fields %}
-                {% include "_partials/_form_field.html" with field=field %}
+                {% if field.name == "excluded_tags" or field.name == "excluded_ingredients" %}
+                    {% comment %}
+                    N3 / B2 — a stable container the client-side filter can bind to. Django's
+                    CheckboxSelectMultiple puts no id/class on its wrapper and renders <div>
+                    rows, not <li>, so the script keys off this data-checklist hook instead.
+                    {% endcomment %}
+                    <div class="field {% if field.errors %}has-error{% endif %}">
+                        <label>{{ field.label }}</label>
+                        {% if field.help_text %}
+                            <div class="help-text" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>
+                        {% endif %}
+                        <div class="checklist" data-checklist="{{ field.name }}">{{ field }}</div>
+                        {% if field.errors %}
+                            <ul class="field-errors" role="alert">
+                                {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    {% include "_partials/_form_field.html" with field=field %}
+                {% endif %}
+                {% if field.name == "dish_template" %}
+                    <p class="help-text" data-testid="balanced-explainer">
+                        Balanced picks only dishes that cover protein, carb and vegetable
+                        together (or builds one from your recipes). Choose One-pot or Mix to
+                        also allow partial and one-pot dishes.
+                    </p>
+                {% endif %}
             {% endfor %}
         </fieldset>
     {% endfor %}
@@ -41,4 +68,66 @@
         <a class="btn" href="{% url 'planner:profile-list' %}">Cancel</a>
     </div>
 </form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    // N3 / B2 — a client-side filter over the long exclusion checkbox lists. Binds to the
+    // `data-checklist` container the template renders (Django's CheckboxSelectMultiple exposes
+    // no usable hook of its own) and toggles each checkbox's own wrapper. No JS: the plain
+    // checkbox list still works. Enter in the filter must never submit the form.
+    document.querySelectorAll("[data-checklist]").forEach(function (container) {
+        if (container.dataset.filterReady) { return; }
+        var boxes = Array.prototype.slice.call(
+            container.querySelectorAll('input[type="checkbox"]')
+        );
+        if (!boxes.length) { return; }
+        container.dataset.filterReady = "1";
+        container.classList.add("checklist-scroll");
+        var filter = document.createElement("input");
+        filter.type = "search";
+        filter.placeholder = "Filter…";
+        filter.className = "checklist-filter";
+        filter.setAttribute("aria-label", "Filter this list");
+        filter.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") { event.preventDefault(); }
+        });
+        filter.addEventListener("input", function () {
+            var needle = filter.value.trim().toLowerCase();
+            boxes.forEach(function (box) {
+                var row = box.closest("div") || box.parentNode;
+                row.hidden = needle !== "" && row.textContent.toLowerCase().indexOf(needle) === -1;
+            });
+        });
+        container.parentNode.insertBefore(filter, container);
+    });
+
+    // N2 / B3 — reveal the "Add row" and per-row remove buttons for the tag-limits widget
+    // when JS is available. With no JS the fixed rows still work; removing rows needs no
+    // server change (blank rows serialise away).
+    document.querySelectorAll("[data-tag-limits]").forEach(function (widget) {
+        var add = widget.querySelector("[data-tag-limits-add]");
+        var template = widget.querySelector("[data-tag-limits-template]");
+        if (!add || !template) { return; }
+
+        function wireRemove(button) {
+            if (button.dataset.wired) { return; }
+            button.dataset.wired = "1";
+            button.hidden = false;
+            button.addEventListener("click", function () {
+                var row = button.closest(".tag-limit-row");
+                if (row) { row.remove(); }
+            });
+        }
+
+        widget.querySelectorAll("[data-tag-limits-remove]").forEach(wireRemove);
+        add.hidden = false;
+        add.addEventListener("click", function () {
+            widget.insertBefore(template.content.cloneNode(true), template);
+            widget.querySelectorAll("[data-tag-limits-remove]").forEach(wireRemove);
+        });
+    });
+})();
+</script>
 {% endblock %}

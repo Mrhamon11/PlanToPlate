@@ -16,8 +16,9 @@ from django.db import IntegrityError
 from meals.models import Dish
 from planner.models import MealPlan, MealPlanEntry
 from planner.services.compose import build_recipe_role_pools, compose_balanced_dish
+from planner.services.exceptions import PlannerError
 from planner.services.generate import PlanResult, generate_plan
-from planner.services.persist import save_plan
+from planner.services.persist import reroll_entry, save_plan
 from recipes.models import RecipeRole
 
 pytestmark = pytest.mark.django_db
@@ -117,6 +118,87 @@ def test_save_is_atomic(role_recipes_for_compose, make_profile, alice):
 
     assert MealPlan.objects.count() == 0
     assert Dish.objects.filter(owner=alice).count() == 0
+
+
+# --- single-slot re-roll (B2 / B3) ---------------------------------------------------
+
+
+def test_reroll_never_duplicates_another_days_dish(filled_profile, alice):
+    """Seeded, many iterations: a single-slot re-roll never returns a dish already used by
+    another entry of the same plan (B2)."""
+    result = generate_plan(alice, filled_profile, seed=3, days=4, slots=["DINNER"])
+    plan = save_plan(alice, result, profile=filled_profile, start_date=_START, days=4)
+    entry_ids = list(plan.entries.order_by("day_index").values_list("pk", flat=True))
+
+    for i in range(15):
+        entry = MealPlanEntry.objects.get(pk=entry_ids[i % len(entry_ids)])
+        try:
+            reroll_entry(plan, entry, seed=100 + i)
+        except PlannerError:
+            continue
+        entry.refresh_from_db()
+        others = set(
+            plan.entries.exclude(pk=entry.pk)
+            .filter(dish__isnull=False)
+            .values_list("dish_id", flat=True)
+        )
+        assert entry.dish_id is None or entry.dish_id not in others
+
+
+def test_reroll_avoids_the_current_dish(filled_profile, alice):
+    """After a re-roll the dish differs — the slot's own dish is excluded from the draw (B3)."""
+    result = generate_plan(alice, filled_profile, seed=5, days=3, slots=["DINNER"])
+    plan = save_plan(alice, result, profile=filled_profile, start_date=_START, days=3)
+    entry = plan.entries.order_by("day_index").first()
+    before = entry.dish_id
+
+    reroll_entry(plan, entry, seed=99)
+
+    entry.refresh_from_db()
+    assert entry.dish_id != before
+
+
+def test_reroll_reports_when_no_alternative(pool_dish, make_profile, alice):
+    """One-candidate pool: the slot keeps its dish and a ``PlannerError`` is raised — a
+    re-roll never silently clears a slot (B3)."""
+    dish = pool_dish("Only", owner=alice)
+    profile = make_profile(owner=alice, source_scope="MINE", dish_template="ONE_POT")
+    result = generate_plan(alice, profile, seed=1, days=1, slots=["DINNER"])
+    plan = save_plan(alice, result, profile=profile, start_date=_START, days=1)
+    entry = plan.entries.get()
+    assert entry.dish_id == dish.pk
+
+    with pytest.raises(PlannerError):
+        reroll_entry(plan, entry)
+
+    entry.refresh_from_db()
+    assert entry.dish_id == dish.pk
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reroll_runs_the_generator_outside_a_write_transaction(filled_profile, alice, monkeypatch):
+    """08.19 R1 — ``reroll_entry`` must build the ``PlanResult`` *before* opening its write
+    transaction (ARCHITECTURE §2: "never hold a write transaction across a slow loop"). The
+    generator issues its reads with the connection not in an atomic block."""
+    from django.db import connection
+
+    import planner.services.generate as generate_mod
+
+    result = generate_plan(alice, filled_profile, seed=7, days=2, slots=["DINNER"])
+    plan = save_plan(alice, result, profile=filled_profile, start_date=_START, days=2)
+    entry = plan.entries.order_by("day_index").first()
+
+    real_generate = generate_mod.generate_plan
+    observed: dict[str, bool] = {}
+
+    def spy(*args, **kwargs):
+        observed["in_atomic_block"] = connection.in_atomic_block
+        return real_generate(*args, **kwargs)
+
+    monkeypatch.setattr(generate_mod, "generate_plan", spy)
+    reroll_entry(plan, entry, seed=8)
+
+    assert observed["in_atomic_block"] is False
 
 
 @pytest.fixture

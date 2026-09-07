@@ -15,6 +15,11 @@ failure (a planned dish unshared since save) only `error` is set — surfaced in
     {% else %}
     <form method="get" action="{{ preview_url }}" class="staples-toggle"
           hx-get="{{ preview_url }}" hx-target="#shopping-preview" hx-swap="innerHTML">
+        {% comment %}
+        Always sent, so an *unchecked* box reads as an explicit "include staples" rather
+        than "unspecified → profile default" (B4).
+        {% endcomment %}
+        <input type="hidden" name="staples_toggle" value="1">
         <label>
             <input type="checkbox" name="exclude_staples" value="true"
                    {% if exclude_staples %}checked{% endif %}

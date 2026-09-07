@@ -26,18 +26,29 @@
 {% else %}
     <h2>Your plans</h2>
     {% if plans %}
-        <ul class="card-list" role="list">
-            {% for plan in plans %}
-                <li class="card">
-                    <a class="card-link" href="{{ plan.get_absolute_url }}">
-                        {{ plan.name|default:"Untitled plan" }}
-                    </a>
-                    <p class="help-text">
-                        {{ plan.days }} day{{ plan.days|pluralize }} from {{ plan.start_date|date:"j M Y" }}
-                    </p>
-                </li>
-            {% endfor %}
-        </ul>
+        <form method="post" action="{% url 'planner:plan-bulk-delete' %}" class="bulk-delete-form">
+            {% csrf_token %}
+            <ul class="card-list" role="list">
+                {% for plan in plans %}
+                    <li class="card card-selectable">
+                        <label class="card-select">
+                            <input type="checkbox" name="ids" value="{{ plan.pk }}">
+                            <span class="visually-hidden">Select {{ plan.name|default:"Untitled plan" }}</span>
+                        </label>
+                        <div class="card-selectable-body">
+                            <a class="card-link" href="{{ plan.get_absolute_url }}">
+                                {{ plan.name|default:"Untitled plan" }}
+                            </a>
+                            {% include "_partials/_ownership_badge.html" with object=plan %}
+                            <p class="help-text">
+                                {{ plan.days }} day{{ plan.days|pluralize }} from {{ plan.start_date|date:"j M Y" }}
+                            </p>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+            <button type="submit" class="btn btn-danger">Delete selected</button>
+        </form>
     {% else %}
         <p>No plans yet. <a href="{% url 'planner:plan-generate' %}">Generate your first week.</a></p>
     {% endif %}
@@ -52,5 +63,32 @@
         {% endfor %}
     </ul>
     <p><a class="btn" href="{% url 'planner:profile-list' %}">Manage profiles</a></p>
+{% endif %}
+
+{% comment %}
+"Shared with you" is rendered outside the has_dishes / has_profile gate above and outside the
+owner-only bulk-delete <form>: a sharee has no select checkbox and no "Delete selected" button
+here (PlanBulkDeleteView is scoped to owner=request.user), and a sharee with no dishes or
+profile of their own must still be able to reach a plan shared with them (B2). PUBLIC plans
+surface here too — badged "Public".
+{% endcomment %}
+{% if shared_plans %}
+    <h2>Shared with you</h2>
+    <ul class="card-list" role="list">
+        {% for plan in shared_plans %}
+            <li class="card">
+                <div class="card-selectable-body">
+                    <a class="card-link" href="{{ plan.get_absolute_url }}">
+                        {{ plan.name|default:"Untitled plan" }}
+                    </a>
+                    {% include "_partials/_ownership_badge.html" with object=plan %}
+                    <p class="help-text">
+                        {{ plan.days }} day{{ plan.days|pluralize }} from {{ plan.start_date|date:"j M Y" }}
+                        &middot; from {{ plan.owner.username }}
+                    </p>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
 {% endif %}
 {% endblock %}

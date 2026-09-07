@@ -1,0 +1,25 @@
+{% comment %}
+#modal form to rename a saved plan (B4). Loaded via hx-get into #modal for JS users, or
+rendered as the body of a full page for the no-JS fallback. Owner-only (PlanRenameView uses
+_owned_plan). A blank name is allowed — the plan then shows as "Meal plan" / "Untitled plan".
+
+Context: plan, apply_url, cancel_url.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="plan-rename-title">
+        <h2 id="plan-rename-title">Rename this plan</h2>
+        <form method="post" action="{{ apply_url }}">
+            {% csrf_token %}
+            <div class="field">
+                <label for="id_plan_name">Plan name</label>
+                <input type="text" id="id_plan_name" name="name" maxlength="200"
+                       value="{{ plan.name }}" autocomplete="off">
+                <div class="help-text">Leave blank to show this plan as &ldquo;Untitled plan&rdquo;.</div>
+            </div>
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-primary" hx-disabled-elt="this">Save name</button>
+            </div>
+        </form>
+    </div>
+</div>

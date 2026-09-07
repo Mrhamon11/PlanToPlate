@@ -12,6 +12,7 @@ the profile that produced it was edited or deleted (``design.md``, "Why ``seed``
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -21,6 +22,9 @@ from django.db.models import Q
 
 from catalog.models import Ingredient, Tag
 from core.models import OwnedModel
+
+if TYPE_CHECKING:
+    from core.services.copying import Copier
 
 MAX_DAYS = 7
 
@@ -189,18 +193,26 @@ class MealPlanProfile(models.Model):
 
 
 class MealPlan(OwnedModel):
-    """One planned week — generated from a profile, then hand-adjusted."""
+    """One planned week — generated from a profile, then hand-adjusted.
 
-    #: **D44 re-decision (task 08).** A ``MealPlan`` *references* owned objects — a ``Dish`` per
-    #: entry, an optional ``shopping_list`` — but it does not *contain* them, exactly like
-    #: ``lists.List`` (which carries the same ``= False`` for the same reason). Sharing a plan
-    #: does not cascade read-grants: a recipient sees only the entries whose dish is already
-    #: visible to them, and the generated shopping list is its own separately-shared object.
-    #: Copying a plan is out of scope for this task. Declared explicitly because
-    #: ``core/tests/test_conventions.py``'s relation-walk reaches ``Dish`` / ``List`` through
-    #: ``shopping_list`` and the ``entries`` reverse relation and cannot tell a pointer
-    #: collection from a container.
-    contains_owned_children = False
+    **D44 re-decision (task 08.20, reversing D44's non-cascade clause).** Sharing a plan
+    **cascades** read-grants to its scheduled dishes and their recipe graphs, exactly like
+    sharing a ``Dish`` does — a recipient who can open the week grid can also open every
+    dinner in it (``share_dependencies`` below; the dev-test finding that drove this was a
+    sharee seeing a grid of blank cards with no way into any dish). The refuse-don't-
+    partially-apply rule comes for free from ``core.services.sharing._validate_cascade``: a
+    scheduled dish the plan owner does not own and the recipient cannot already see refuses
+    the whole share.
+
+    ``copy_children`` is a deliberate documented no-op — plan copy is out of scope (D44) and
+    ``MealPlanViewSet.copy`` is ``405``. The two hooks diverge on purpose: share cascades,
+    copy does not. Both are still overridden (never one alone) so
+    ``core/tests/test_conventions.py``'s hooks guard — whose relation-walk reaches ``Dish`` /
+    ``List`` through ``shopping_list`` and the ``entries`` reverse relation — stays green.
+
+    The generated ``shopping_list`` is still a separately-owned, separately-shared object and
+    is **not** a share dependency: it is not part of "seeing the plan".
+    """
 
     name = models.CharField(max_length=200, blank=True)
     start_date = models.DateField()
@@ -243,6 +255,29 @@ class MealPlan(OwnedModel):
         from django.urls import reverse
 
         return reverse("planner:plan-detail", args=[self.pk])
+
+    def share_dependencies(self) -> list[OwnedModel]:
+        """The distinct dishes scheduled in this plan's entries — sharing the plan grants
+        read on each, which ``core.services.graph.walk_dependencies`` then transitively pulls
+        through to their component recipes, sub-recipes and ingredients (the same graph the
+        ``Dish`` cascade walks). Entries with no dish (unfilled slots) contribute nothing.
+        """
+        dishes: dict[int, OwnedModel] = {}
+        for entry in self.entries.select_related("dish"):
+            if entry.dish_id is not None and entry.dish_id not in dishes:
+                dishes[entry.dish_id] = entry.dish
+        return list(dishes.values())
+
+    def copy_children(self, new_obj: MealPlan, *, copier: Copier) -> None:
+        """Deliberate no-op. Plan copy is out of scope (D44) and ``MealPlanViewSet.copy`` is
+        ``405``, so nothing ever walks this hook — but it is still overridden (never leave one
+        of the pair on the inherited default) so the hooks guard treats ``MealPlan`` as a
+        model whose sharing/copying posture was *decided*, not overlooked. Do not "fix" the
+        asymmetry with ``share_dependencies`` by copying entries here: a real plan copy would
+        also have to reset ``profile`` / ``profile_snapshot`` / ``shopping_list`` and is a
+        separate feature.
+        """
+        return None
 
 
 class MealPlanEntry(models.Model):

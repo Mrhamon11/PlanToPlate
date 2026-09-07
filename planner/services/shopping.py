@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import transaction
-
 from lists.services import (
     ShoppingPreview,
     ShoppingResult,
@@ -26,9 +24,12 @@ if TYPE_CHECKING:
     from planner.models import MealPlan
 
 
-def _staples_default(plan: MealPlan) -> bool:
-    """Whether to drop staples: the live profile's ``exclude_staples`` if the profile still
-    exists, else the value frozen into the plan's snapshot, else ``True`` (the design default).
+def staples_default(plan: MealPlan) -> bool:
+    """Whether to drop staples when the caller passed nothing explicit: the live profile's
+    ``exclude_staples`` if the profile still exists, else the value frozen into the plan's
+    snapshot, else ``True`` (the design default). The one fallback both the services and the
+    HTML views (B4) use, so the toggle's pre-checked state can never disagree with what
+    generation would actually do.
     """
     if plan.profile is not None:
         return plan.profile.exclude_staples
@@ -58,20 +59,24 @@ def generate_shopping_list(
     ``exclude_staples`` defaults to the plan's profile / snapshot preference.
     """
     if exclude_staples is None:
-        exclude_staples = _staples_default(plan)
+        exclude_staples = staples_default(plan)
 
-    with transaction.atomic():
-        lst = plan.shopping_list or get_or_create_default_shopping_list(plan.owner)
-        result = populate_shopping_list(
-            lst,
-            _planned_dishes(plan),
-            source_plan=plan,
-            exclude_staples=exclude_staples,
-            replace_generated=True,
-        )
-        if plan.shopping_list_id != lst.pk:
-            plan.shopping_list = lst
-            plan.save(update_fields=["shopping_list"])
+    lst = plan.shopping_list or get_or_create_default_shopping_list(plan.owner)
+    # ``populate_shopping_list`` does its bounded flatten / aggregate / recipe-graph walk
+    # before opening its own write transaction — no outer ``atomic()`` here, so that compute
+    # is never held inside ``BEGIN IMMEDIATE`` (08.20 review; ARCHITECTURE §2). If the link
+    # save below fails, the next run repopulates and links (``replace_generated`` scopes the
+    # delete to this plan, so the window is self-healing).
+    result = populate_shopping_list(
+        lst,
+        _planned_dishes(plan),
+        source_plan=plan,
+        exclude_staples=exclude_staples,
+        replace_generated=True,
+    )
+    if plan.shopping_list_id != lst.pk:
+        plan.shopping_list = lst
+        plan.save(update_fields=["shopping_list"])
     return result
 
 
@@ -82,8 +87,8 @@ def preview_shopping_list(
     list is created or linked.
     """
     if exclude_staples is None:
-        exclude_staples = _staples_default(plan)
+        exclude_staples = staples_default(plan)
     return _preview_lines(plan.owner, _planned_dishes(plan), exclude_staples=exclude_staples)
 
 
-__all__ = ["generate_shopping_list", "preview_shopping_list"]
+__all__ = ["generate_shopping_list", "preview_shopping_list", "staples_default"]

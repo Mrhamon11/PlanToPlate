@@ -97,7 +97,27 @@ def test_plan_stores_seed_and_snapshot(make_plan):
 
 def test_plan_is_owned():
     assert issubclass(MealPlan, OwnedModel)
-    assert MealPlan.contains_owned_children is False
+
+
+def test_plan_share_dependencies_are_its_scheduled_dishes(
+    make_plan, make_dish, add_component, make_recipe
+):
+    """08.20 B1 — sharing a plan cascades read-grants to the distinct dishes in its entries
+    (``walk_dependencies`` pulls the recipe graph from there). Both hooks are overridden —
+    ``copy_children`` is a deliberate no-op — so the conventions hooks guard stays green."""
+    plan = make_plan()
+    d1 = make_dish("Roast")
+    add_component(d1, make_recipe("R1"))
+    d2 = make_dish("Curry")
+    add_component(d2, make_recipe("R2"))
+    MealPlanEntry.objects.create(plan=plan, day_index=0, slot="DINNER", dish=d1)
+    MealPlanEntry.objects.create(plan=plan, day_index=1, slot="DINNER", dish=d2)
+    MealPlanEntry.objects.create(plan=plan, day_index=2, slot="DINNER", dish=d1)  # repeat
+    MealPlanEntry.objects.create(plan=plan, day_index=3, slot="DINNER", dish=None)  # unfilled
+
+    assert {d.pk for d in plan.share_dependencies()} == {d1.pk, d2.pk}
+    assert MealPlan.share_dependencies is not OwnedModel.share_dependencies
+    assert MealPlan.copy_children is not OwnedModel.copy_children
 
 
 def test_entry_dish_set_null_on_delete(make_plan, make_dish, add_component, make_recipe):

@@ -287,3 +287,22 @@ need a full design) only when a subtask is actually picked up.
   only in their label and index grouping heading. Decide: keep them as harmless labels, keep
   only `MEAL_PLAN` (task 08 may use it) and drop `MENU`, or collapse to `SHOPPING` + `GENERIC`.
   Cosmetic; resolve whenever task 08 settles whether it creates a `MEAL_PLAN`-kind list.
+
+- [ ] **11.28 — `PlanShareView` / `PlanUnshareView` resolve the plan via `visible_to`, not `_owned_plan`**
+  *Found in:* task 08 review pass 3 (NB5), 2026-09-07. `planner/views.py` (`PlanShareView.post`,
+  `PlanUnshareView.post`).
+  *Issue:* both do `get_object_or_404(MealPlan.objects.visible_to(request.user), pk=pk)` where
+  `PlanDeleteView` / `PlanShareModalView` use the owner-only `_owned_plan(request, pk)` helper.
+  **No security or behaviour gap** — a sharee's submit is still refused inside `share()` /
+  `unshare()` (`_require_can_manage_sharing` raises Django `PermissionDenied` → 403, confirmed
+  by `test_plan_share_is_owner_only`) — purely an inconsistency with the sibling views. Fix is
+  two lines: swap the `get_object_or_404` for `_owned_plan(request, pk)` in both. Carried
+  forward from the 08.17 F2 parity note.
+
+- [ ] **11.29 — Planner manual-swap `<select>` renders two empty `<option>`s when a slot is filled**
+  *Found in:* task 08 review pass 3 (NB7), 2026-09-07.
+  `templates/planner/_partials/_slot_card.html` (~line 69).
+  *Issue:* when the slot has a dish, the swap control renders both a "Swap / clear…"
+  `<option value="">` and a "— clear this slot —" `<option value="">`. Harmless (both submit an
+  empty `dish`, which clears the slot) but odd markup. Drop the duplicate or merge the labels.
+  Fold into any future planner UI polish pass. Sibling of [[11.12]] / [[11.13]] / [[11.15]].

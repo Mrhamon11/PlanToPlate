@@ -10,9 +10,14 @@ from __future__ import annotations
 import time
 
 import pytest
+from django.test import Client
 from rest_framework.test import APIClient
 
+from catalog.models import Ingredient
+from core.services.sharing import SharingError, share, unshare
+from meals.models import Dish
 from planner.models import MealPlan, MealPlanEntry, MealPlanProfile
+from recipes.models import Recipe
 
 pytestmark = pytest.mark.django_db
 
@@ -93,6 +98,13 @@ def test_plan_idor_matrix(alice, carol):
     assert carol_client.post(
         f"/api/planner/plans/{shared.pk}/regenerate/", {}, format="json"
     ).status_code in (403, 400)
+    # a read-only sharee cannot write the owner's shopping list from the plan either
+    assert (
+        carol_client.post(
+            f"/api/planner/plans/{shared.pk}/generate-shopping-list/", {}, format="json"
+        ).status_code
+        == 403
+    )
 
     # a shared-plan reader must not be able to pull the owner's aggregated ingredient list
     assert (
@@ -277,6 +289,186 @@ def test_cannot_inject_profile_snapshot(alice, pool):
     plan.refresh_from_db()
     assert "tampered" not in plan.profile_snapshot
     assert plan.seed == 5
+
+
+# --- plan delete / share are owner-only (B8 / B9) ----------------------------------
+
+
+def test_plan_bulk_delete_ignores_unowned_ids(alice, carol):
+    """The HTML bulk-delete endpoint filters every id through ``visible_to(user).filter(
+    owner=user)`` — another user's id in the payload is ignored, never an error (B8)."""
+    mine = MealPlan.objects.create(
+        owner=carol, name="Mine", start_date="2026-01-05", days=1, seed=1
+    )
+    theirs = MealPlan.objects.create(
+        owner=alice, name="Theirs", start_date="2026-01-05", days=1, seed=1
+    )
+
+    client = Client()
+    client.force_login(carol)
+    response = client.post("/planner/plans/delete/", {"ids": [mine.pk, theirs.pk], "confirm": "1"})
+
+    assert response.status_code == 302
+    assert not MealPlan.objects.filter(pk=mine.pk).exists()
+    assert MealPlan.objects.filter(pk=theirs.pk).exists()
+
+
+def test_plan_share_is_owner_only(alice, carol, bob):
+    """A read-only sharee cannot re-share or unshare the plan (B9)."""
+    plan = MealPlan.objects.create(
+        owner=alice, name="P", start_date="2026-01-05", days=1, seed=1, visibility="SHARED"
+    )
+    plan.shared_with.add(carol)
+
+    client = Client()
+    client.force_login(carol)
+
+    assert (
+        client.post(f"/planner/plans/{plan.pk}/share/", {"visibility": "PUBLIC"}).status_code == 403
+    )
+    assert client.post(f"/planner/plans/{plan.pk}/unshare/", {"users": [bob.pk]}).status_code == 403
+    plan.refresh_from_db()
+    assert plan.visibility == "SHARED"
+
+
+def test_plan_rename_is_owner_only(alice, carol):
+    """B4 — the HTML rename endpoint resolves through ``_owned_plan``: another user's private
+    plan is a 404, a shared plan a 403, and the name never changes."""
+    private = MealPlan.objects.create(
+        owner=alice, name="Private", start_date="2026-01-05", days=1, seed=1
+    )
+    shared = MealPlan.objects.create(
+        owner=alice, name="Shared", start_date="2026-01-05", days=1, seed=1, visibility="SHARED"
+    )
+    shared.shared_with.add(carol)
+
+    client = Client()
+    client.force_login(carol)
+
+    assert client.get(f"/planner/plans/{private.pk}/rename/").status_code == 404
+    assert client.post(f"/planner/plans/{private.pk}/rename/", {"name": "x"}).status_code == 404
+    assert client.get(f"/planner/plans/{shared.pk}/rename/").status_code == 403
+    assert client.post(f"/planner/plans/{shared.pk}/rename/", {"name": "x"}).status_code == 403
+
+    private.refresh_from_db()
+    shared.refresh_from_db()
+    assert private.name == "Private"
+    assert shared.name == "Shared"
+
+
+# --- sharing a plan cascades read to its dishes / recipes (08.20 B1) -----------------
+
+
+def _plan_with_dishes(owner, dishes):
+    plan = MealPlan.objects.create(
+        owner=owner,
+        name="Week",
+        start_date="2026-03-02",
+        days=len(dishes),
+        seed=1,
+        profile_snapshot={"slots": ["DINNER"]},
+    )
+    for day, dish in enumerate(dishes):
+        MealPlanEntry.objects.create(plan=plan, day_index=day, slot="DINNER", dish=dish)
+    return plan
+
+
+def test_sharing_a_plan_cascades_read_to_its_dishes_and_recipes(
+    alice,
+    carol,
+    make_dish,
+    make_recipe,
+    add_component,
+    add_ingredient,
+    add_sub_recipe,
+    make_ingredient,
+):
+    """hamon shares a plan whose dinners are hamon-owned private dishes; afterwards each
+    dish, its component recipes, their sub-recipes and ingredients are visible_to(avi), and
+    the plan-detail grid renders the dish names as working links."""
+    allergen = make_ingredient("Alice Peanut", owner=alice, visibility="PRIVATE")
+    sub = make_recipe("Alice Sub", owner=alice, visibility="PRIVATE")
+    add_ingredient(sub, allergen)
+    main = make_recipe("Alice Main", owner=alice, visibility="PRIVATE")
+    add_sub_recipe(main, sub)
+    dish = make_dish("Alice Dinner", owner=alice, visibility="PRIVATE")
+    add_component(dish, main)
+    plan = _plan_with_dishes(alice, [dish])
+
+    share(plan, actor=alice, users=[carol])
+
+    assert MealPlan.objects.visible_to(carol).filter(pk=plan.pk).exists()
+    assert Dish.objects.visible_to(carol).filter(pk=dish.pk).exists()
+    assert Recipe.objects.visible_to(carol).filter(pk=main.pk).exists()
+    assert Recipe.objects.visible_to(carol).filter(pk=sub.pk).exists()
+    assert Ingredient.objects.visible_to(carol).filter(pk=allergen.pk).exists()
+
+    client = Client()
+    client.force_login(carol)
+    body = client.get(f"/planner/plans/{plan.pk}/").content.decode()
+    assert f'<a href="{dish.get_absolute_url()}">{dish.name}</a>' in body
+    assert "A dish shared privately" not in body
+
+
+def test_sharing_a_plan_with_an_ungrantable_dish_is_refused(
+    alice, bob, carol, make_dish, make_recipe, add_component
+):
+    """A dish owned by a third user that the recipient cannot see refuses the whole share,
+    names the dish, and adds nothing to any ``shared_with`` (no partial state)."""
+    foreign = make_dish("Bob Secret", owner=bob, visibility="PRIVATE")
+    add_component(foreign, make_recipe("Bob Secret Recipe", owner=bob, visibility="PRIVATE"))
+    mine = make_dish("Alice Dish", owner=alice, visibility="PRIVATE")
+    add_component(mine, make_recipe("Alice Recipe", owner=alice, visibility="PRIVATE"))
+    plan = _plan_with_dishes(alice, [mine, foreign])
+
+    with pytest.raises(SharingError) as exc:
+        share(plan, actor=alice, users=[carol])
+
+    assert "Bob Secret" in str(exc.value)
+    assert not MealPlan.objects.visible_to(carol).filter(pk=plan.pk).exists()
+    assert carol not in plan.shared_with.all()
+    assert carol not in mine.shared_with.all()
+    assert carol not in foreign.shared_with.all()
+
+
+def test_unsharing_a_plan_does_not_revoke_the_cascaded_dish_grants(
+    alice, carol, make_dish, make_recipe, add_component
+):
+    """D31's asymmetry, pinned for plans so it is not later read as a leak: after ``unshare``
+    the recipient keeps read on the dishes / recipes the share granted."""
+    dish = make_dish("Alice Dinner", owner=alice, visibility="PRIVATE")
+    recipe = make_recipe("Alice Recipe", owner=alice, visibility="PRIVATE")
+    add_component(dish, recipe)
+    plan = _plan_with_dishes(alice, [dish])
+    share(plan, actor=alice, users=[carol])
+
+    unshare(plan, actor=alice, users=[carol])
+
+    assert not MealPlan.objects.visible_to(carol).filter(pk=plan.pk).exists()
+    assert Dish.objects.visible_to(carol).filter(pk=dish.pk).exists()
+    assert Recipe.objects.visible_to(carol).filter(pk=recipe.pk).exists()
+
+
+def test_plan_share_post_resolves_through_owned_plan(alice, bob, carol):
+    """08.19 R2 — ``PlanShareView`` / ``PlanUnshareView`` resolve through ``_owned_plan``:
+    a non-owner who cannot see the plan gets a 404 (distinct from
+    ``test_plan_share_is_owner_only``, which only covered the shared-sharee 403 path)."""
+    private = MealPlan.objects.create(
+        owner=alice, name="P", start_date="2026-01-05", days=1, seed=1
+    )
+    client = Client()
+    client.force_login(bob)
+
+    assert (
+        client.post(f"/planner/plans/{private.pk}/share/", {"visibility": "PUBLIC"}).status_code
+        == 404
+    )
+    assert (
+        client.post(f"/planner/plans/{private.pk}/unshare/", {"users": [carol.pk]}).status_code
+        == 404
+    )
+    private.refresh_from_db()
+    assert private.visibility == "PRIVATE"
 
 
 # --- generation is time-bounded -----------------------------------------------------

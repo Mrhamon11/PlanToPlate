@@ -264,6 +264,84 @@ def test_manual_swap_entry(client_for, pool, profile, make_dish, make_recipe, ad
     assert MealPlanEntry.objects.get(pk=entry["id"]).dish_id == swap_in.pk
 
 
+def test_manual_swap_clears_lock(client_for, pool, profile, make_dish, make_recipe, add_component):
+    """A manual dish swap via the API PATCH is a deliberate override — it clears ``is_locked``,
+    matching the HTML ``PlanEntrySwapView`` (owner decision, 08 final rework)."""
+    client, alice = client_for(username="alice")
+    pool(alice)
+    prof = profile(alice)
+    swap_in = make_dish("Hand picked", owner=alice)
+    add_component(swap_in, make_recipe("Hand picked recipe", owner=alice))
+
+    created = client.post(
+        "/api/planner/plans/",
+        {"profile": prof.pk, "start_date": _START, "seed": 3},
+        format="json",
+    ).data
+    entry = next(e for e in created["entries"] if e["dish"] is not None)
+    plan_id = created["id"]
+    url = f"/api/planner/plans/{plan_id}/entries/{entry['id']}/"
+
+    client.patch(url, {"is_locked": True}, format="json")
+    assert MealPlanEntry.objects.get(pk=entry["id"]).is_locked is True
+
+    response = client.patch(url, {"dish": swap_in.pk}, format="json")
+
+    assert response.status_code == 200, response.data
+    assert response.data["is_locked"] is False
+    assert MealPlanEntry.objects.get(pk=entry["id"]).is_locked is False
+
+
+def test_note_only_patch_leaves_lock_untouched(client_for, pool, profile):
+    """A PATCH that does not change ``dish`` (here: only ``note``) must not silently clear a
+    lock the user set."""
+    client, alice = client_for(username="alice")
+    pool(alice)
+    prof = profile(alice)
+    created = client.post(
+        "/api/planner/plans/",
+        {"profile": prof.pk, "start_date": _START, "seed": 3},
+        format="json",
+    ).data
+    entry = next(e for e in created["entries"] if e["dish"] is not None)
+    url = f"/api/planner/plans/{created['id']}/entries/{entry['id']}/"
+
+    client.patch(url, {"is_locked": True}, format="json")
+    response = client.patch(url, {"note": "cook double"}, format="json")
+
+    assert response.status_code == 200, response.data
+    assert response.data["is_locked"] is True
+    row = MealPlanEntry.objects.get(pk=entry["id"])
+    assert row.is_locked is True
+    assert row.note == "cook double"
+
+
+def test_explicit_lock_toggle_with_swap_is_honoured(
+    client_for, pool, profile, make_dish, make_recipe, add_component
+):
+    """A PATCH that swaps the dish *and* explicitly sets ``is_locked`` keeps the client's
+    value — the auto-clear only fills in an unspecified lock."""
+    client, alice = client_for(username="alice")
+    pool(alice)
+    prof = profile(alice)
+    swap_in = make_dish("Hand picked", owner=alice)
+    add_component(swap_in, make_recipe("Hand picked recipe", owner=alice))
+
+    created = client.post(
+        "/api/planner/plans/",
+        {"profile": prof.pk, "start_date": _START, "seed": 3},
+        format="json",
+    ).data
+    entry = next(e for e in created["entries"] if e["dish"] is not None)
+    url = f"/api/planner/plans/{created['id']}/entries/{entry['id']}/"
+
+    response = client.patch(url, {"dish": swap_in.pk, "is_locked": True}, format="json")
+
+    assert response.status_code == 200, response.data
+    assert response.data["is_locked"] is True
+    assert MealPlanEntry.objects.get(pk=entry["id"]).is_locked is True
+
+
 def test_clear_entry(client_for, pool, profile):
     client, alice = client_for(username="alice")
     pool(alice)

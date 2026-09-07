@@ -4,7 +4,10 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>{{ plan.name|default:"Meal plan" }}</h1>
+    <h1>
+        {{ plan.name|default:"Meal plan" }}
+        {% include "_partials/_ownership_badge.html" with object=plan %}
+    </h1>
     <a class="btn" href="{% url 'planner:index' %}">Back to planner</a>
 </div>
 
@@ -15,8 +18,8 @@
 </p>
 
 {% if is_owner %}
-    <div class="detail-actions">
-        <form method="post" action="{% url 'planner:plan-regenerate' plan.pk %}" style="display:inline">
+    <div class="detail-actions plan-actions">
+        <form method="post" action="{% url 'planner:plan-regenerate' plan.pk %}">
             {% csrf_token %}
             <button type="submit" class="btn">Re-roll unlocked slots</button>
         </form>
@@ -33,10 +36,35 @@
         <a class="btn" href="{% url 'planner:plan-shopping-preview' plan.pk %}"
            hx-get="{% url 'planner:plan-shopping-preview' plan.pk %}"
            hx-target="#shopping-preview" hx-swap="innerHTML">Shopping list</a>
+        <span class="plan-actions-divider" aria-hidden="true"></span>
+        <a class="btn" href="{% url 'planner:plan-rename' plan.pk %}"
+           hx-get="{% url 'planner:plan-rename' plan.pk %}"
+           hx-target="#modal" hx-swap="innerHTML">Rename</a>
+        <a class="btn" href="{% url 'planner:plan-share-modal' plan.pk %}"
+           hx-get="{% url 'planner:plan-share-modal' plan.pk %}"
+           hx-target="#modal" hx-swap="innerHTML">Share</a>
+        <a class="btn btn-danger" href="{% url 'planner:plan-delete' plan.pk %}"
+           hx-get="{% url 'planner:plan-delete' plan.pk %}"
+           hx-target="#modal" hx-swap="innerHTML">Delete plan</a>
     </div>
 {% endif %}
 
-{% include "planner/_partials/_plan_grid.html" with mode="saved" %}
+{% if is_owner %}
+    {% if empty_pool %}
+        {% include "planner/_partials/_empty_pool.html" with reason=empty_pool_reason %}
+    {% elif reason_banner %}
+        <div class="alert alert-info reason-banner" role="note">
+            <p><strong>Why some slots are empty</strong> — recomputed from this plan&rsquo;s settings:</p>
+            <ul>
+                {% for reason in reason_banner %}<li>{{ reason }}</li>{% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+{% endif %}
+
+{% if not empty_pool %}
+    {% include "planner/_partials/_plan_grid.html" with mode="saved" %}
+{% endif %}
 
 <section id="shopping-preview" aria-live="polite"></section>
 <div id="modal"></div>

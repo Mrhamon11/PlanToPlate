@@ -20,7 +20,7 @@ Context:
 
     {% if entry.dish %}
         <p class="slot-card-dish">
-            {% if mode == "saved" and entry.dish_visible and entry.dish.pk %}
+            {% if entry.dish.pk and entry.dish_visible %}
                 <a href="{{ entry.dish.get_absolute_url }}">{{ entry.dish.name }}</a>
             {% elif entry.dish.pk and not entry.dish_visible %}
                 <span class="slot-card-hidden">A dish shared privately</span>

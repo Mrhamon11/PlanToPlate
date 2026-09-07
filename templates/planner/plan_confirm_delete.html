@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Delete plan{{ bulk_plans|yesno:"s," }} — PlanToPlate{% endblock %}
+
+{% block content %}
+{% if bulk_plans %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-delete-title">
+        <h2 id="confirm-delete-title">
+            Delete {{ bulk_plans|length }} plan{{ bulk_plans|length|pluralize }}?
+        </h2>
+        <p>This cannot be undone. Any shopping list a plan generated is kept.</p>
+        <ul>
+            {% for plan in bulk_plans %}<li>{{ plan }}</li>{% endfor %}
+        </ul>
+        <form method="post" action="{{ apply_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="1">
+            {% for plan in bulk_plans %}
+                <input type="hidden" name="ids" value="{{ plan.pk }}">
+            {% endfor %}
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn btn-danger" hx-disabled-elt="this">Delete them</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% else %}
+{% include "planner/_partials/_plan_confirm_delete.html" %}
+{% endif %}
+{% endblock %}

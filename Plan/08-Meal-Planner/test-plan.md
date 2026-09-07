@@ -156,6 +156,77 @@ One test per gear, each proving the gear actually narrows the pool.
 | `test_generate.py::test_regenerate_without_a_seed_draws_a_fresh_one` | Regenerate with no seed ≠ the plan's own seed. |
 | `test_api.py` / `test_security.py` `days` bound | `PATCH {"days": 8}` / huge is a 400, not a mass entry write. |
 
+## Dev-test rework (2026-09-07) — subtask 08.16
+
+Full context, root causes and owner decisions: the 08.16 block in [`tasks.md`](tasks.md) and
+the decision-log entries recorded under 08.15 (the `.review-findings.md` this was drawn from
+has been consumed and deleted per the pipeline contract).
+
+| Test | Asserts |
+|---|---|
+| `test_views.py::test_preview_grid_shows_dish_names` | A generate **preview** renders the pool dish names (linked for real dishes, plain for composed) and never "A dish shared privately". (B1) |
+| `test_generate.py::test_locked_entry_after_the_slot_reserves_its_dish` | A locked entry on a later day keeps its dish out of an earlier unlocked slot in the same pass. (B2) |
+| `test_persist.py::test_reroll_never_duplicates_another_days_dish` | Seeded, many iterations: a single-slot re-roll never returns a dish used by another entry. (B2) |
+| `test_persist.py::test_reroll_avoids_the_current_dish` | Seeded: after a re-roll the dish differs; in a one-candidate pool a `PlannerError` is raised and the dish is unchanged. (B3) |
+| `test_persist.py::test_reroll_reports_when_no_alternative` | No other candidate → `PlannerError`, slot untouched. (B3) |
+| `test_views.py::test_reroll_htmx_shows_message_when_nothing_changed` | The view surfaces an info message, not a silent success. (B3) |
+| `test_views.py::test_shopping_preview_unchecking_staples_includes_them` | Box unchecked → staple lines present, `staples_skipped == 0`. (B4) |
+| `test_views.py::test_generate_shopping_list_respects_unchecked_staples` | The written list includes staples when the box was unchecked. (B4) |
+| `test_views.py::test_profile_form_clamps_min_rating` | `-5` saves `1`, `10` saves `5`, blank saves `None` — no form error. (B5) |
+| `test_views.py::test_profile_form_clamps_favorites_bias` | `0` / `0.5` save `1.00` — no form error. (B6) |
+| `test_views.py::test_profile_create_without_touching_favorites_bias` | The "Favorites bias" input renders pre-filled with the model default; submitting the create form without a manual value saves `1.50` — not a silently-required field. (B6, pass 2) |
+| `test_views.py::test_saved_plan_with_unfilled_slots_shows_reason_banner` | A saved plan with empty slots renders a page-level reason banner above the grid. (B7) |
+| `test_views.py::test_saved_plan_all_unfilled_shows_empty_pool_guidance` | Every slot empty + empty pool → `_empty_pool` guidance, not a wall of blank cards. (B7) |
+| `test_views.py::test_regenerate_into_all_unfilled_shows_guidance_not_blank_grid` | After a regenerate that fills nothing, the detail page explains why. (B7) |
+| `test_views.py::test_delete_plan_owner_only` | Owner deletes; entries cascade; the linked `List` survives. (B8) |
+| `test_views.py::test_delete_plan_forbidden_for_sharee` | 403. (B8) |
+| `test_views.py::test_bulk_delete_plans` | Only the requester's ids are removed; an unowned id in the payload is ignored, not an error. (B8) |
+| `test_security.py::test_plan_bulk_delete_ignores_unowned_ids` | IDOR guard on the bulk endpoint. (B8) |
+| `test_views.py::test_share_plan_grants_read_only_access` | Sharee GETs the grid; every write action (lock / reroll / swap / regenerate / days / shopping) is 403. (B9) |
+| `test_views.py::test_unshare_plan_revokes_access` | (B9) |
+| `test_security.py::test_plan_share_is_owner_only` | A sharee cannot re-share or unshare. (B9) |
+| `test_views.py::test_plan_card_links_to_plan` | The plan card's whole area is a link target. (N1) |
+| `test_views.py::test_profile_form_tag_limits_widget_roundtrips` | Two rows save `{"chicken": 1, "beef": 2}`; editing back shows two populated rows. (N2) |
+| `test_views.py::test_profile_form_rebound_with_saved_tag_limits_is_unchanged` | Re-binding the form with its own saved `{tag: int}` reports `tag_limits` not changed — `has_changed` compares ints, not int-vs-str. (N2, pass 2) |
+| `test_views.py::test_profile_form_excluded_ingredients_render_as_checkboxes` | Checkbox group, not a multi-select. (N3) |
+
+## Dev-test rework round 2 (2026-09-07) — subtask 08.18
+
+| Test | Asserts |
+|---|---|
+| `test_views.py::test_selectable_plan_card_renders_checkbox_and_link` | The bulk-delete card keeps both its `name="ids"` checkbox and the whole-card `a.card-link` in the new gutter layout. (B1) |
+| `test_views.py::test_profile_form_exclusion_lists_are_filterable` | Both exclusion checkbox groups render the `data-checklist` container the client-side filter binds to. (B2) |
+| `test_views.py::test_tag_limits_widget_defaults_to_three_rows` | An unbound create form renders exactly 3 `.tag-limit-row`s. (B3) |
+| `test_views.py::test_tag_limits_widget_render_includes_remove_control` | Each row carries the `data-tag-limits-remove` hook. (B3) |
+| `test_views.py::test_tag_limits_fewer_rows_than_default_still_saves` | 1 populated + 1 blank row saves `{tag: n}` cleanly — row removal needs no server change. (B3) |
+| `test_views.py::test_rename_plan_owner_only` | Owner renames, `name` persists and renders; a read-only sharee GET+POST is 403, name unchanged. (B4) |
+| `test_views.py::test_rename_plan_blank_name` | Renaming to blank is allowed and the plan shows as "Untitled plan". (B4) |
+| `test_security.py::test_plan_rename_is_owner_only` | Another user's private plan id → 404, shared → 403; name never changes. (B4) |
+
+## Reviewer polish (post-08.18 review, 2026-09-07) — subtask 08.19
+
+| Test | Asserts |
+|---|---|
+| `test_persist.py::test_reroll_runs_the_generator_outside_a_write_transaction` | `reroll_entry` builds the `PlanResult` before opening its write transaction — the generator runs with the connection not in an atomic block. (R1) |
+| `test_security.py::test_plan_share_post_resolves_through_owned_plan` | `PlanShareView` / `PlanUnshareView` POST resolve through `_owned_plan`: a non-owner who cannot see the plan gets 404 (distinct from the sharee-403 case). (R2) |
+
+## Dev-test rework round 3 (2026-09-07) — subtask 08.20
+
+Sharing a saved plan from `hamon` to `avi`.
+
+| Test | Asserts |
+|---|---|
+| `test_models.py::test_plan_share_dependencies_are_its_scheduled_dishes` | `MealPlan.share_dependencies()` returns the entries' distinct dishes (repeats deduped, unfilled slots skipped); both hooks overridden. (B1) |
+| `test_security.py::test_sharing_a_plan_cascades_read_to_its_dishes_and_recipes` | After `share(plan, …)` each scheduled dish, its component recipes, sub-recipes and ingredients are `visible_to` the recipient, and the plan-detail grid renders the dish names as working links. (B1) |
+| `test_security.py::test_sharing_a_plan_with_an_ungrantable_dish_is_refused` | A dish owned by a third user the recipient cannot see → `SharingError` naming the dish; nothing added to any `shared_with`. (B1) |
+| `test_security.py::test_unsharing_a_plan_does_not_revoke_the_cascaded_dish_grants` | D31 asymmetry pinned for plans: after `unshare` the recipient keeps read on the cascaded dishes/recipes. (B1) |
+| `test_views.py::test_shared_plan_appears_in_sharees_planner_index` | A plan shared hamon→avi shows in avi's `/planner/` under "Shared with you", with no select checkbox and no bulk-delete button in that section. (B2) |
+| `test_views.py::test_owner_still_sees_own_plans_with_bulk_delete` | Regression guard on the owner path. (B2) |
+| `test_views.py::test_invisible_plan_appears_in_neither_section` | A private plan owned by someone else is in neither section. (B2) |
+| `test_views.py::test_planner_index_shows_ownership_badges` | Owned plan → "Mine"; shared → "Shared with me"; public → "Public". (B3) |
+| `test_views.py::test_plan_detail_shows_ownership_badge_for_sharee` | `plan_detail.html` renders the badge near the heading. (B3) |
+| `lists/tests/test_views.py::test_list_index_shows_ownership_badges` | The kind-grouped Lists index badges each row Mine / Shared with me / Public (already wired since task 07 — pinned by the B3 audit). |
+
 ## Manual verification
 
 1. Seed a realistic library (~15 dishes), set chicken ≤ 1, generate 7 days, and confirm by eye
@@ -169,13 +240,17 @@ One test per gear, each proving the gear actually narrows the pool.
 
 ## Definition of Done
 
-- [ ] Every test above exists and passes; every generator test pins a seed.
-- [ ] `ruff` clean; suite green; no pending migrations.
-- [ ] Identical seed → identical plan, proven.
-- [ ] The generator never hangs and always explains unfilled slots.
-- [ ] The candidate pool is built exclusively from `visible_to`.
-- [ ] Composed dishes are not persisted on preview.
-- [ ] Shopping-list regeneration does not duplicate — proven through the planner.
-- [ ] All six manual verifications performed and reported.
-- [ ] The `MealPlan`-vs-`List` open question in `MILESTONES.md` §8 is resolved and recorded.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated.
+- [x] Every test above exists and passes; every generator test pins a seed.
+- [x] `ruff` clean; suite green (1053 passed / 1 skipped); no pending migrations.
+- [x] Identical seed → identical plan, proven (`test_same_seed_produces_identical_plan`,
+  `test_backtracking_path_is_deterministic`).
+- [x] The generator never hangs and always explains unfilled slots.
+- [x] The candidate pool is built exclusively from `visible_to`.
+- [x] Composed dishes are not persisted on preview.
+- [x] Shopping-list regeneration does not duplicate — proven through the planner
+  (`test_regeneration_does_not_duplicate`).
+- [x] Manual verifications performed across the three dev-test rounds (08.16 / 08.18 / 08.20),
+  logged in `dev-test-walkthrough.md`.
+- [x] The `MealPlan`-vs-`List` open question (`ARCHITECTURE.md` §7) is resolved and recorded:
+  `MealPlan` stays a distinct model that generates a `List`; never rendered as `kind=MEAL_PLAN`.
+- [x] Subtasks ticked; `../MILESTONES.md` updated.

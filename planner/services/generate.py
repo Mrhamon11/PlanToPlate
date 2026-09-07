@@ -81,12 +81,18 @@ def generate_plan(
     days: int | None = None,
     slots: Sequence[str] | None = None,
     locked: Sequence[MealPlanEntry] | None = None,
+    exclude: Sequence[int] | None = None,
 ) -> PlanResult:
     """Generate a plan for ``user`` under ``profile`` with the given ``seed``.
 
     ``days`` / ``slots`` default to the profile's. ``locked`` entries are placed unchanged,
     still consume their tag budget, and count as used dishes — a locked chicken dish plus a
     limit of one means no *second* chicken (``design.md``, step 3).
+
+    ``exclude`` is a set of dish ids barred from every slot of this pass — a single-slot
+    re-roll passes the slot's own current dish here so the re-roll cannot simply draw it
+    again (``design.md``, "``is_locked``": *"Single-slot re-roll also excludes the slot's own
+    current dish"*).
     """
     days = days if days is not None else profile.days
     slot_names = [str(s) for s in (slots if slots is not None else profile.slots)]
@@ -95,7 +101,8 @@ def generate_plan(
 
     rng = random.Random(seed)  # noqa: S311 - deterministic, non-crypto by design (C9)
 
-    pool = build_candidate_pool(user, profile)
+    exclude_ids = {int(dish_id) for dish_id in (exclude or []) if dish_id is not None}
+    pool = [dish for dish in build_candidate_pool(user, profile) if dish.pk not in exclude_ids]
     pool_by_id = {dish.pk: dish for dish in pool}
     favorite_ids = set(
         DishStats.objects.filter(
@@ -310,17 +317,28 @@ def _build_result(
 def _state_before(
     index, grid, assignments, locked_by_cell, tags_by_dish, limits
 ) -> tuple[set[int], dict[str, int]]:
-    """Dishes already used and the tag budget remaining, recomputed from every filled slot
-    before ``index`` (locked slots included). Recomputed rather than maintained incrementally
-    — the grid is tiny (<=21 slots) and a stale incremental counter is exactly the "wrong in
-    the direction the user notices" bug ``test_locked_entries_consume_tag_budget`` guards.
+    """Dishes already used and the tag budget remaining.
+
+    Folds in **every** locked entry regardless of its grid position, plus every non-locked
+    slot already filled before ``index``. A locked entry is a fixed point: its dish must count
+    as used and its tags must spend budget even when it sits on a *later* day, or a
+    single-slot re-roll (which locks every other entry and refills one early slot) hands back
+    a dish already used further down the week (B2 / ``design.md``, "``is_locked``").
+
+    Recomputed rather than maintained incrementally — the grid is tiny (<=21 slots) and a
+    stale incremental counter is exactly the "wrong in the direction the user notices" bug
+    ``test_locked_entries_consume_tag_budget`` guards.
     """
     used: set[int] = set()
     budget = dict(limits)
-    for position in range(index):
-        cell = grid[position]
+    for position, cell in enumerate(grid):
         locked_entry = locked_by_cell.get(cell)
-        dish = locked_entry.dish if locked_entry is not None else assignments.get(position)
+        if locked_entry is not None:
+            dish = locked_entry.dish
+        elif position < index:
+            dish = assignments.get(position)
+        else:
+            dish = None
         if dish is None:
             continue
         if dish.pk is not None:

@@ -201,14 +201,24 @@ def reconcile_entries(plan: MealPlan, *, days: int, slots: Sequence[str]) -> Non
         MealPlanEntry.objects.bulk_create(additions)
 
 
-@transaction.atomic
 def reroll_entry(plan: MealPlan, entry: MealPlanEntry, *, seed: int | None = None) -> MealPlanEntry:
     """Re-roll a single slot, leaving every other entry untouched (``design.md``, "API":
     *"Re-roll one slot"*; test-plan: *"Other entries unchanged"*).
 
     Every other entry is pinned as ``locked`` for one generator pass, so the new dish avoids
     the week's other dishes and respects the remaining tag budget exactly as a regeneration
-    would. ``seed`` defaults to a fresh random draw — a reroll is "try my luck again".
+    would. The slot's **own current dish** is excluded from the draw, so a re-roll cannot hand
+    back the dish that was already there (B3). ``seed`` defaults to a fresh random draw — a
+    reroll is "try my luck again".
+
+    If nothing else fits the slot and it currently holds a dish, that dish is **kept** and a
+    :class:`PlannerError` is raised for the caller to surface — a re-roll never silently
+    clears a slot (``design.md``, "``is_locked``").
+
+    The generator (10+ SELECTs plus bounded backtracking) runs **before** the write
+    transaction is opened — only the final entry write and any composed-dish materialisation
+    are atomic (ARCHITECTURE §2: "never hold a write transaction across a slow loop"; the
+    ``regenerate_plan`` path is structured the same way, 08.19 R1).
     """
     from planner.services.generate import generate_plan
 
@@ -220,6 +230,7 @@ def reroll_entry(plan: MealPlan, entry: MealPlanEntry, *, seed: int | None = Non
     seed = random.randrange(_SEED_CEILING) if seed is None else seed  # noqa: S311 - non-crypto
     slots = snapshot_slots(plan)
     others = [other for other in plan.entries.all() if other.pk != entry.pk]
+    current_dish_id = entry.dish_id
 
     result = generate_plan(
         plan.owner,
@@ -228,6 +239,7 @@ def reroll_entry(plan: MealPlan, entry: MealPlanEntry, *, seed: int | None = Non
         days=plan.days,
         slots=slots,
         locked=others,
+        exclude=[current_dish_id] if current_dish_id is not None else None,
     )
 
     match = next(
@@ -239,12 +251,17 @@ def reroll_entry(plan: MealPlan, entry: MealPlanEntry, *, seed: int | None = Non
         None,
     )
     new_dish = match.dish if match is not None else None
-    if new_dish is not None and is_composed(new_dish):
-        new_dish = _materialise_composed_dish(new_dish, owner=plan.owner, cache={})
+    if new_dish is None and current_dish_id is not None:
+        raise PlannerError(
+            "No other dish fits this slot's constraints — clear it or loosen the profile."
+        )
 
-    entry.dish = new_dish
-    entry.is_locked = False
-    entry.save(update_fields=["dish", "is_locked"])
+    with transaction.atomic():
+        if new_dish is not None and is_composed(new_dish):
+            new_dish = _materialise_composed_dish(new_dish, owner=plan.owner, cache={})
+        entry.dish = new_dish
+        entry.is_locked = False
+        entry.save(update_fields=["dish", "is_locked"])
     return entry
 
 

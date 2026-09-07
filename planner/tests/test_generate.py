@@ -131,6 +131,24 @@ def test_locked_entries_preserved_on_regenerate(make_pool_dish, make_profile, al
     assert day1.is_locked is True
 
 
+def test_locked_entry_after_the_slot_reserves_its_dish(make_pool_dish, make_profile, alice):
+    """A locked entry is a fixed point regardless of grid position: a dish pinned on a *later*
+    day must be kept out of an earlier unlocked slot in the same pass (B2). Without this, a
+    single-slot re-roll (which locks every other entry) can hand back a dish already used
+    further down the week.
+    """
+    a = make_pool_dish("Dish A", owner=alice)
+    b = make_pool_dish("Dish B", owner=alice)
+    profile = make_profile(owner=alice, dish_template="ONE_POT")
+
+    locked = [MealPlanEntry(day_index=1, slot="DINNER", dish=a, is_locked=True)]
+    result = generate_plan(alice, profile, seed=7, days=2, slots=["DINNER"], locked=locked)
+
+    by_day = {e.day_index: e for e in result.entries}
+    assert by_day[1].dish_id == a.pk
+    assert by_day[0].dish_id == b.pk  # A is reserved by the later locked slot
+
+
 def test_locked_entries_consume_tag_budget(make_pool_dish, make_profile, make_tag, alice):
     chicken = make_tag("chicken")
     locked_dish = make_pool_dish("Locked chicken", owner=alice, tags=[chicken])

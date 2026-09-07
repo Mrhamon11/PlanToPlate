@@ -255,10 +255,250 @@
   task 12, which is best done right after this task lands.
   *Files:* `templates/core/_partials/_home_content.html`, `core/tests/test_templates.py`
 
-- [ ] **08.15 — Update the living document**
-  Task 08 → AWAITING APPROVAL. Resolve the `MealPlan`-vs-`List` open question recorded in
-  `MILESTONES.md` §8.
-  *Files:* `Plan/MILESTONES.md`
+- [x] **08.16 — Dev-test rework (manual pass, 2026-09-07)**
+  Fixes and additions from the human click-through (`dev-test-walkthrough.md`). The findings
+  file this block was worked from (`.review-findings.md`) has been consumed and deleted per the
+  pipeline contract; every owner decision and root cause it carried is folded into the B1–N6
+  notes below and the decision-log entries under 08.15. Ran **before** 08.15's final wrap-up.
+  *Blocking:*
+  - B1 preview grid labels every dish "A dish shared privately" (`_slot_card.html` /
+    `PlanGenerateView` — preview entries never get `dish_visible`, and the name is only linked
+    in `saved` mode).
+  - B2 single-slot reroll can duplicate another day's dish — `generate._state_before` only
+    counts slots before the grid index, so locked entries after the rerolled slot don't
+    reserve their dish. Fold all locked entries into the used-set / tag budget regardless of
+    position.
+  - B3 reroll re-picks the same dish / silent no-op — `reroll_entry` doesn't exclude the
+    slot's own current dish; surface a message when nothing fits / nothing changed.
+  - B4 "Leave out pantry staples" can't be unchecked — bare checkbox; unchecking reads as
+    "unspecified" → profile default `True`. Tri-state it.
+  - B5 `min_rating` — clamp blank→None / `<1`→1 / `>5`→5 in the form (no error); spinner
+    `min=1 max=5`.
+  - B6 `favorites_bias` — clamp `<1`→1 in the form; spinner `min=1`. No migration (model
+    stays `>= 0` + generator zero-weight fallback).
+  - B7 all-empty / heavily-unfilled saved plan has no explanation (walkthrough 6e + 10).
+    **Owner decision: page-level reason banner on `PlanDetailView`, no schema change** — the
+    persisted per-slot `reason` stays the `BACKLOG.md` item.
+  - B8 no way to delete a plan — `PlanDeleteView` + confirm + button, plus multi-select
+    delete on the planner index. Must not delete the linked shopping `List`.
+  - B9 no way to share a plan (walkthrough 11). **Owner decision: add it now** — replicate the
+    per-app `_ShareView` / `_share_modal` pattern for `MealPlan` (read-only-for-recipients is
+    already enforced). Edit-share (11a) is a future task — no code this pass.
+  *Non-blocking, this pass:* N1 whole plan/profile card clickable · N2 `tag_limits` per-row
+  widget (closes the `BACKLOG.md` UI-polish item) · N3 `excluded_ingredients` checkbox list +
+  search · N4 plan action-bar layout (owner picked a single aligned horizontal row) · N5
+  generate-screen Days label (the field overrides the profile; blank = profile default) · N6
+  Balanced-template explainer + `dev-test-walkthrough.md` Scenario 9 correction (**owner
+  decision: keep strict Balanced, fix messaging** — the pool is correct, the template has no
+  partial/one-pot fallback by design).
+  *Recorded, no code:* excluded-tags only filters dish-level `Dish.tags` (an untagged or
+  auto-composed dish survives "exclude every tag") — `design.md` clarification only;
+  pantry-list feature → its own task (pointer in `BACKLOG.md`); a stray materialised
+  "Turkey Meatballs + Skillet Cornbread + Almond Green Beans" dish on the dev box, to prune
+  or re-seed before the next manual pass.
+  *Files:* `planner/views.py`, `planner/urls.py`, `planner/services/generate.py`,
+  `planner/services/persist.py`, `templates/planner/**`, `templates/planner/_partials/**`,
+  `static/css/components.css`, `planner/tests/**`, `dev-test-walkthrough.md`.
+
+- [x] **08.17 — Reviewer polish findings (post-08.16 review, 2026-09-07)**
+  Three non-blocking findings from the 08.16 code review, flagged "fix now". Runs **before**
+  08.15's final wrap-up. Each needs a test that fails on regression.
+  - **F1 (blocking-quality — `design.md` conformance): `plan_detail.html` still renders the
+    grid under the empty-pool guidance.** When `empty_pool` is true the page shows the
+    `_empty_pool` guidance *and then* `{% include "planner/_partials/_plan_grid.html" %}`, so
+    the owner gets the guidance followed by a wall of "Empty" cards. `design.md` ("Edge
+    cases" / "UI") says an effectively-empty pool shows "the empty-state guidance instead of
+    a wall of blank cards". Fix: wrap the grid include in `{% if not empty_pool %}`. Tighten
+    `test_saved_plan_all_unfilled_shows_empty_pool_guidance` (`test_views.py`) to also assert
+    `'class="plan-grid"' not in body`.
+  - **F2 (parity): `PlanShareModalView.get` resolves via `visible_to`, not `_owned_plan`.**
+    A read-only sharee can open the (non-functional) share modal — it renders without
+    `shareable_users` and any submit still 403s via `share()`, so no security impact, but it
+    is inconsistent with `PlanDeleteView` and the design's "Share / unshare are owner-only".
+    Fix: use `_owned_plan` (or early `raise PermissionDenied` when
+    `plan.owner_id != request.user.id`). Add a test that a sharee GET is 403/404.
+  - **F3 (misleading message): `PlanEntryRerollView.post` "Nothing changed — no other dish
+    fits this slot."** is only reachable when re-rolling an already-empty slot that stays
+    empty (a successful `reroll_entry` cannot return the excluded current dish; a failed one
+    raises `PlannerError`). It reads as a failure where the user deliberately re-rolled a
+    blank slot. Fix: guard with `and before is not None`, or drop the branch (the
+    `PlannerError` path already covers "nothing fits"). Adjust or add the covering test.
+  *Files:* `templates/planner/plan_detail.html`, `planner/views.py`, `planner/tests/test_views.py`.
+  *Landed (2026-09-07):* F1 — grid include in `plan_detail.html` now gated `{% if not empty_pool %}`
+  (`empty_pool` is only ever truthy for the owner, so a sharee still always gets the grid). F2 —
+  `PlanShareModalView.get` now resolves via `_owned_plan` (sharee GET → 403). F3 — the reroll
+  "nothing changed" info branch is now guarded `before is not None and self.entry.dish_id == before`.
+  Tests: tightened `test_saved_plan_all_unfilled_shows_empty_pool_guidance` (+`class="plan-grid"`
+  absence); new `test_share_modal_forbidden_for_sharee`,
+  `test_reroll_empty_slot_that_stays_empty_shows_no_misleading_message`.
+  *Carried-forward parity note (fold into the 08.15 review, no code this pass unless the reviewer
+  disagrees):* F2 fixed only the modal `GET`. `PlanShareView.post` / `PlanUnshareView.post` still
+  resolve via `visible_to`, not `_owned_plan` — a sharee's submit is refused inside
+  `share()` / `unshare()` by the actor check (403), so there is no security or behaviour gap, but
+  the resolution path is still inconsistent with `PlanDeleteView`. Align them or accept the
+  asymmetry explicitly.
+
+- [x] **08.18 — Dev-test rework round 2 (manual pass, 2026-09-07)**
+  Four findings B1–B4 from a second human click-through on `fedora-headless` (after 08.16 /
+  08.17). Full owner words, root causes and per-item tests were in
+  `Plan/08-Meal-Planner/.review-findings.md` — consumed and deleted per the pipeline contract.
+  Runs **before** 08.15's wrap-up. All four are template / widget / view / CSS only — no model
+  or migration change.
+  - **B1 — plan-index select checkbox overlapped the card and was hard to press.** Root cause:
+    `.card-select` was `position: absolute` inside the card's own padding box (on top of the
+    title text) and lost the z-index tie to the stretched `a.card-link::after`. Fix: the
+    `.card-selectable` card is now a flex row — the checkbox has its own leading `--tap-target`
+    gutter (`.card-select`, `z-index: 2` above the stretched link) and the title + meta sit in
+    a new `.card-selectable-body` wrapper (`plan_index.html`). Test:
+    `test_views.py::test_selectable_plan_card_renders_checkbox_and_link` (both the `name="ids"`
+    checkbox and the whole-card `a.card-link` survive; visual check noted for the manual pass).
+  - **B2 — profile-form exclusion filter did nothing and Enter reloaded the page.** Root
+    causes: the script keyed off `id_excluded_*` / `<li>` rows, but `CheckboxSelectMultiple`
+    renders `<div>` rows (no `<li>`), so the filter matched nothing; and the injected
+    `<input type="search">` lived inside `<form>`, so Enter submitted. Fix: `profile_form.html`
+    now wraps both `excluded_tags` / `excluded_ingredients` in
+    `<div class="checklist" data-checklist="…">`; the script binds to that hook, toggles each
+    checkbox's own wrapper (`box.closest("div")`), and `preventDefault`s Enter in the filter.
+    Still progressive — no JS leaves the plain checkbox list. Tests:
+    `test_views.py::test_profile_form_exclusion_lists_are_filterable` (markup contract for both
+    fields) + the existing `test_profile_form_excluded_ingredients_render_as_checkboxes` still
+    green.
+  - **B3 — tag-limits widget: default 5 rows → 3, add per-row remove buttons.** Owner decision:
+    allow removing down to **zero** rows (an all-blank set already serialises to `{}`, and
+    `value_from_datadict`'s `zip(strict=False)` + blank-skip needs no server change). Fix:
+    `TagLimitsWidget.MIN_ROWS = 3`; `_row` renders a `data-tag-limits-remove` button (hidden
+    until the profile-form script reveals it and wires the click to `row.remove()`); the
+    `<template>` clone carries it too. Tests:
+    `test_views.py::test_tag_limits_widget_defaults_to_three_rows`,
+    `test_tag_limits_widget_render_includes_remove_control`,
+    `test_tag_limits_fewer_rows_than_default_still_saves`. No existing N2 test hard-coded a
+    5-row count (they assert specific option values), so none needed the row-count fix the
+    findings file anticipated.
+  - **B4 — no HTML way to rename a `MealPlan` after creation.** Fix: `PlanRenameView`
+    (`GET` renders a tiny form — `#modal` fragment for HTMX, full page otherwise; `POST` writes
+    `name` and redirects back), owner-only via `_owned_plan` (sharee → 403). Route
+    `planner:plan-rename`; templates `planner/plan_rename.html` + `_partials/_plan_rename.html`;
+    a **Rename** button added to the `plan_detail.html` owner action bar next to Share / Delete.
+    Owner decision on the blank-name rule: **allow blank and trim**, matching the generate flow
+    — a cleared name renders as "Meal plan" / "Untitled plan". Tests:
+    `test_views.py::test_rename_plan_owner_only`, `test_rename_plan_blank_name`;
+    `test_security.py::test_plan_rename_is_owner_only` (another user's private plan → 404,
+    shared → 403, name unchanged).
+  *Files:* `planner/views.py`, `planner/urls.py`, `static/css/components.css`,
+  `templates/planner/plan_index.html`, `templates/planner/profile_form.html`,
+  `templates/planner/plan_detail.html`, `templates/planner/plan_rename.html`,
+  `templates/planner/_partials/_plan_rename.html`, `planner/tests/test_views.py`,
+  `planner/tests/test_security.py`, `Plan/08-Meal-Planner/dev-test-walkthrough.md`.
+  *Landed (2026-09-07):* all four fixed; `.review-findings.md` deleted. Full `uv run pytest`
+  green (1036 passed / 1 skipped), `ruff check` + `ruff format` clean,
+  `makemigrations --check` clean.
+
+- [x] **08.19 — Reviewer polish findings (post-08.18 review, 2026-09-07)**
+  Three non-blocking "fix now" findings from the post-08.18 p2p-reviewer pass (verdict:
+  APPROVE — none are blocking). All small and low-risk. Runs **before** 08.15's wrap-up.
+  Each code fix needs a test that fails on regression.
+  - **R1 — `persist.reroll_entry` runs the generator inside its own write transaction.**
+    `planner/services/persist.py` (~lines 204–260): `reroll_entry` is `@transaction.atomic`
+    and calls `generate_plan()` (~10+ SELECTs plus bounded backtracking) while holding the
+    `transaction_mode="IMMEDIATE"` write lock. The API `regenerate` path deliberately does
+    the opposite — `regenerate_plan()` runs outside any transaction and only
+    `update_plan_in_place()` is atomic. Violates ARCHITECTURE §2 "never hold a write
+    transaction across a slow loop". Fix: build the `PlanResult` before
+    `with transaction.atomic():` in `reroll_entry`, mirroring `regenerate`. Add/adjust a test
+    asserting generation happens outside the atomic block (e.g. the reroll path issues its
+    reads before `BEGIN IMMEDIATE`, or a narrower unit assertion on call ordering).
+  - **R2 — `PlanShareView.post` / `PlanUnshareView.post` resolve via `visible_to`, not
+    `_owned_plan`.** `planner/views.py` (~lines 1022–1044). Functionally safe today —
+    `core.services.sharing.share/unshare` raise `PermissionDenied` for a non-owner actor and
+    these views do not catch it, so a sharee gets a real 403 (`test_plan_share_is_owner_only`
+    passes) — but the resolution path is inconsistent with `PlanDeleteView` /
+    `PlanRenameView` / `PlanShareModalView`, all of which use `_owned_plan`, and with
+    CLAUDE.md §6 ("never hand-roll an ownership filter in a view"). Fix: one-line swap to
+    `_owned_plan` in both views. **This resolves the 08.17 carried-forward parity note**
+    (F2's "modal GET fixed, POST still on `visible_to`"). Add a test that a sharee's
+    share/unshare POST is 403/404 (distinct from the existing owner-only test).
+  - **R3 — `import random` inside `PlanGenerateView.post`.** `planner/views.py` (~line 512).
+    The other random draws in the file's service layer import at module scope. Cosmetic —
+    move to a module-level import. Covered by existing generate tests; no new test needed.
+  *Files:* `planner/services/persist.py`, `planner/views.py`, `planner/tests/` (test_persist,
+  test_security or test_views).
+  *Landed (2026-09-07):* R1 — `reroll_entry` is no longer `@transaction.atomic`; it builds
+  the `PlanResult` first and only the entry write / composed-dish materialisation run inside
+  a `with transaction.atomic()` block (mirrors `regenerate_plan`). R2 — `PlanShareView.post`
+  / `PlanUnshareView.post` resolve through `_owned_plan` (non-owner who cannot see the plan →
+  404, sharee → 403), closing the 08.17 carried parity note. R3 — `import random` moved to
+  module scope in `planner/views.py`. Tests:
+  `test_persist.py::test_reroll_runs_the_generator_outside_a_write_transaction`
+  (`django_db(transaction=True)` — asserts the generator runs with the connection not in an
+  atomic block), `test_security.py::test_plan_share_post_resolves_through_owned_plan`.
+
+- [x] **08.20 — Dev-test rework round 3 (manual pass, 2026-09-07)**
+  Three findings B1–B3 from a third human click-through on `fedora-headless`, sharing a saved
+  plan from `hamon` to `avi`. Full owner words, root causes and per-item tests are in
+  `Plan/08-Meal-Planner/.review-findings.md` — the dev works that file and deletes it. Also
+  folds in the still-open **08.19** reviewer-polish findings (R1–R3), since the dev is already
+  in those files. Runs **before** 08.15's wrap-up.
+  - **B1 — sharing a plan does not cascade read-grants to its dishes/recipes.** Owner decision:
+    cascade exactly like `Dish` sharing — `MealPlan.share_dependencies()` returns the entries'
+    distinct dishes, `walk_dependencies` pulls the rest; same refuse-if-ungrantable rule.
+    Reverses D44's cascade clause (decision-log write-up deferred to 08.15). Re-decide
+    `contains_owned_children`; `copy_children` stays a documented no-op.
+  - **B2 — a plan shared with you never shows in your planner index.**
+    `PlanIndexView` filters `owner=user`. Add a separate "Shared with you" section outside the
+    owner-only bulk-delete form.
+  - **B3 — no ownership badge in the planner, and the Lists index lacks it too.** Wire the
+    existing `_ownership_badge.html` into the planner pages and audit every owned-object index
+    page, adding it where missing.
+  *Files:* `planner/models.py`, `planner/views.py`, `planner/services/persist.py`,
+  `templates/planner/**`, `templates/lists/**`, `planner/tests/**`, `lists/tests/**`.
+  *Deferred, recorded in `Plan/13-Collaborative-Sharing/design.md` (no code this pass):*
+  make-public UI discoverability; sort/filter a list page by access type; the whole
+  sharing-model rework (household/group concept, edit access) the owner wants designed in a
+  planning session.
+  *Landed (2026-09-07):* B1 — `MealPlan.share_dependencies()` returns the entries' distinct
+  dishes; `walk_dependencies` pulls each dish's recipe graph, and
+  `core.services.sharing._validate_cascade` gives the refuse-if-ungrantable behaviour for
+  free. `contains_owned_children = False` removed (back to `None`); both `share_dependencies`
+  and `copy_children` are now overridden (`copy_children` a documented no-op — plan copy is
+  out of scope, `MealPlanViewSet.copy` is 405), so `core/tests/test_conventions.py` stays
+  green. Model docstring rewritten to describe the cascade posture (ARCHITECTURE.md
+  decision-log write-up left to 08.15 as instructed). B2 — `PlanIndexView` adds
+  `shared_plans` (`visible_to(user).exclude(owner=user)`); `plan_index.html` renders a
+  "Shared with you" section **outside** both the has-dishes/has-profile gate and the
+  owner-only bulk-delete `<form>` (a sharee with no dishes/profile of their own must still
+  reach a shared plan). B3 — `_ownership_badge.html` wired into `plan_index.html` (both
+  sections) and `plan_detail.html` (next to the heading). Index-page audit: recipe / dish /
+  book / ingredient indexes render the badge via their `_*_results.html` partials, and the
+  Lists index via `_list_index.html:29` — all already present since task 07; the planner was
+  the only gap. Tests: `test_models.py::test_plan_share_dependencies_are_its_scheduled_dishes`;
+  `test_security.py::test_sharing_a_plan_cascades_read_to_its_dishes_and_recipes`,
+  `test_sharing_a_plan_with_an_ungrantable_dish_is_refused`,
+  `test_unsharing_a_plan_does_not_revoke_the_cascaded_dish_grants`;
+  `test_views.py::test_shared_plan_appears_in_sharees_planner_index`,
+  `test_owner_still_sees_own_plans_with_bulk_delete`,
+  `test_invisible_plan_appears_in_neither_section`,
+  `test_planner_index_shows_ownership_badges`,
+  `test_plan_detail_shows_ownership_badge_for_sharee`;
+  `lists/tests/test_views.py::test_list_index_shows_ownership_badges`.
+  `.review-findings.md` consumed and deleted per the pipeline contract.
+
+- [x] **08.15 — Update the living document**
+  Task 08 → AWAITING APPROVAL → COMPLETE (owner-approved 2026-09-07). Resolved the
+  `MealPlan`-vs-`List` open question (`ARCHITECTURE.md` §7): `MealPlan` stays a distinct model
+  that *generates* a `List`; it is never rendered as a `kind=MEAL_PLAN` list. The generated
+  shopping list is a separately-owned, separately-shared `List`, and deleting a plan removes
+  its entries but not that list.
+  *Landed (2026-09-07):* `MILESTONES.md` task-08 row rewritten and status → COMPLETE;
+  decision-log entries D44 (amended), D47–D50 added to `ARCHITECTURE.md`; `ARCHITECTURE.md` §5
+  gear-8 semantics + `exclude_staples` acknowledgement noted; §7 open question struck;
+  stale `.review-findings.md` pointers in this file and `test-plan.md` re-pointed.
+  *Files:* `Plan/MILESTONES.md`, `Plan/ARCHITECTURE.md`
+  *Carried-forward doc cleanup (08.16 rework, 2026-09-07):* `.review-findings.md` has been
+  consumed and deleted per the pipeline contract, but `tasks.md` (this 08.16 block) and
+  `test-plan.md` (the "Dev-test rework (2026-09-07)" heading, ~line 161) still point at it for
+  "full context / root causes / owner decisions". Re-point or drop those two references while
+  updating the living docs — the owner decisions they cite are already folded into the 08.16
+  `tasks.md` block and the decision-log notes above.
   *Carried-forward review findings (08.1–08.4 review) — fold into the `ARCHITECTURE.md`
   decision-log update at task completion:*
   - `design.md` was edited on this branch: `source_scope` default `MINE_AND_SHARED` → `SHARED`
@@ -266,12 +506,27 @@
     expanded to describe per-slot BALANCED/ONE_POT alternation (a genuine refinement). The
     `MIX` semantics **and** the strict-BALANCED "no dish-level fallback" behaviour should land
     in the decision log, not only in `design.md` + code comments.
-  - The D44 re-decision (`MealPlan.contains_owned_children = False`; sharing does not cascade;
-    plan copy out of scope) currently lives only in the model docstring — ARCHITECTURE.md D44
-    says task 08 "must re-decide" this, so record the outcome in the decision log.
+  - **The D44 re-decision landed in 08.20 B1 — record it in the decision log.** Task 08
+    *reverses* D44's non-cascade clause: sharing a `MealPlan` **cascades** read-grants to its
+    scheduled dishes and their recipe graphs, exactly like sharing a `Dish`
+    (`MealPlan.share_dependencies()` → the entries' distinct dishes → `walk_dependencies`),
+    with the same refuse-if-a-dependency-can't-be-granted rule. `contains_owned_children` is
+    back to `None` (the line was removed); both `share_dependencies` and `copy_children` are
+    overridden, `copy_children` a deliberate no-op (plan copy stays out of scope,
+    `MealPlanViewSet.copy` is 405). The generated `shopping_list` is **not** a share
+    dependency. The model docstring and `design.md`'s "Security notes" now describe this;
+    ARCHITECTURE.md D44 still needs the struck-through-and-noted update.
+    *Depth-budget note (08.20 dev run):* `walk_dependencies` caps at `MAX_DEPTH = 5`. Rooting
+    the walk at the plan adds one level above each dish, so a plan share over a near-maximal
+    recipe graph (dish → recipe → sub → sub → sub) can raise `DepthExceededError` where
+    sharing that same dish directly would still pass. `share()` turns `GraphError` into a
+    user-facing refusal (not a 500), and real recipe nesting is shallow, so this is a latent
+    asymmetry, not a live bug — pin it in the decision log or accept it explicitly.
   - *(08 review, 2026-09-06)* When recording the D44 sharing posture, note the accepted
     tombstoning boundary: `MealPlanEntrySerializer` nulls `dish_name` for a dish the viewer
-    cannot see but still returns the raw integer `dish` id. This is **consistent with the
+    cannot see but still returns the raw integer `dish` id (still reachable when a dish is
+    unshared *after* the plan was shared, even though a fresh cascade now makes every
+    scheduled dish visible). This is **consistent with the
     reviewed task-07 `ListItemSerializer` pattern** (plain `PrimaryKeyRelatedField` +
     tombstoned `_name`); the id is not dereferenceable (`/api/meals/dishes/<id>/` is
     `visible_to`-scoped → 404) and the threat model is 10-20 trusted users. Accepted as-is.
@@ -359,6 +614,27 @@
     `compose`) models a cook prepping in parallel, so it diverges from `design.md` gear 8's
     "prep + cook budget per meal" shorthand. Already documented in that function; note the
     accepted reading in the decision log.
+  - *(dev-test rework, 2026-09-07 — 08.16)* Decision-log lines:
+    - **Plan sharing UI shipped** (walkthrough finding 11). Owner-approved. Uses the same
+      `shared_with` M2M and read-only-recipient posture as dishes/lists; edit-share is
+      deferred to the future edit-share task (11a). **Superseded by 08.20 B1:** sharing a plan
+      now *cascades* to its scheduled dishes (like `Dish` sharing), `contains_owned_children`
+      is back to `None`, and both hooks are overridden — see the 08.20 note above.
+    - **Plan delete UI shipped** (single + multi-select). Deleting a plan cascades its
+      entries but never its generated shopping `List` (a separately-owned object, D44).
+    - **Strict BALANCED confirmed by owner** — no fallback to a partial / one-pot dish; an
+      unmet BALANCED slot composes from recipes, else goes explained-unfilled. Non-P/C/V
+      shared/public dishes surface only under One-pot / Mix. Messaging added, not behaviour.
+    - **Saved-plan unfilled slots** now get a page-level reason banner recomputed from the
+      plan's own seed; the per-slot persisted `reason` field remains a `BACKLOG.md` item.
+    - **Excluded-tags filters dish-level `Dish.tags` only** — an untagged or auto-composed
+      dish is not caught by "exclude every tag". Accepted; recipe-level tag exclusion would
+      be a separate task.
+    - **`MealPlan.name` is `blank=True`, not the required field `design.md` specifies**
+      (`name = models.CharField(max_length=200)`). Owner's 08.18 B4 decision ("allow blank
+      and trim") — a cleared name renders as "Meal plan" / "Untitled plan", matching the
+      generate flow. Already implemented and tested; record the deviation in the decision log.
+      *(post-08.18 review, 2026-09-07.)*
 
   > **Then tell the owner, explicitly, that [task 12 — Home Dashboard](../12-Home-Dashboard/design.md)
   > is the next task to run.** It is the only task gated on 08 finishing rather than on the
