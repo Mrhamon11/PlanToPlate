@@ -78,6 +78,9 @@ planned task. Each line: what, where it came from, why it is not urgent.
   `"Auto-composed by the meal planner."` is now duplicated across three call sites
   (`persist._materialise_composed_dish` and two view sites); the durable-marker fix should
   also extract a `COMPOSED_DISH_NOTES` constant and a single `is_auto_composed(dish)` helper.
+  *(Now owned by task 14 — `Plan/14-Planner-Dish-Construction/`.)* Task 14 replaces
+  auto-materialisation entirely: composed dinners become temp `MealPlanEntry.composed_recipe_ids`
+  and the marker string / `notes`-equality check go away. Strike this item when 14 lands.
 
 - **Backtracking can over-release `composed_recipe_ids`.** (Task 08 review, 2026-09-06.)
   `planner/services/generate.py:226-233` — when a backtrack sweep clears a range containing a
@@ -133,6 +136,16 @@ planned task. Each line: what, where it came from, why it is not urgent.
   shortfall. Reuses task 05–07's flatten / aggregate / scale machinery — the new logic is the
   set-difference against pantry quantities, which belongs in `lists/services.py`, plus the
   pantry model and its UI. Sized as its own task, not a planner sub-task.
+
+## Code hygiene
+
+- **`ruff format` drift on two `planner/` files from the task 08 merge.** (Task 12.1–12.4
+  dev run, 2026-09-07.) `planner/serializers.py` and `planner/tests/test_views.py` are
+  committed in a state `ruff format .` wants to reformat — they landed unformatted through
+  the task 08 merge (#11), missed because the pipeline runs `ruff format` only over files a
+  task touched. Fix is one commit: `uv run ruff format planner/serializers.py
+  planner/tests/test_views.py`. Harmless, but it makes every future planner task's format
+  step noisy — whoever picks up task 14 (planner) can fold it in.
 
 ## Operations / dev workflow
 
