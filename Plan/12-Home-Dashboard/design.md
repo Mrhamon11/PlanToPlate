@@ -154,3 +154,12 @@ per row.
 - **"Shared with you" must not leak the share audience.** It lists objects, and per D35 the
   `shared_with` list is owner-only — the panel shows the object and its owner's username,
   never who else it was shared with.
+
+## Carried-in findings
+
+- **`MealPlanSerializer.get_entries` is N+1 across plans.** (Task 08 review, 2026-09-06.)
+  `planner/serializers.py` builds `_entry_context` per plan, running one
+  `Dish.objects.visible_to(user)` query for each plan row. Harmless at 10–20 users today, but
+  this task adds a panel that lists a user's plans and will make the N+1 visible. When
+  building that panel, resolve visible dishes once page-wide and thread the cache through the
+  serializer context rather than per-plan.

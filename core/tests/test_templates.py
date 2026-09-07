@@ -60,19 +60,16 @@ def test_home_requires_login(client):
 
 
 def test_home_dashboard_cards(client, user_factory):
-    """The sections that exist (recipes, dishes, books, lists — tasks 04-07) are real links on
-    the home dashboard; only the planner (08) is still a non-interactive "Coming soon." card.
+    """Every section (recipes, dishes, books, lists, planner — tasks 04-08) is a real link on
+    the home dashboard; no "Coming soon." placeholder card remains.
     """
     client.force_login(user_factory())
 
     content = client.get(reverse("core:home")).content.decode()
 
-    for path in ("/recipes/", "/dishes/", "/books/", "/lists/"):
+    for path in ("/recipes/", "/dishes/", "/books/", "/lists/", "/planner/"):
         assert f'href="{path}"' in content
-    assert content.count("Coming soon.") == 1
-    # The live sections must not be dressed as "coming soon"
-    coming_soon_block = content.split("Planner")[-1]
-    assert "Recipes" not in coming_soon_block and "Lists" not in coming_soon_block
+    assert "Coming soon." not in content
 
 
 def test_auth_screens_render_as_complete_documents(client, user_factory):

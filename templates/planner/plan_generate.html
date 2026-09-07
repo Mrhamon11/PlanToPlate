@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Generate a week — PlanToPlate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Generate a week</h1>
+    <a class="btn" href="{% url 'planner:index' %}">Back to planner</a>
+</div>
+
+{% if not has_dishes and not preview %}
+    {% include "planner/_partials/_empty_pool.html" %}
+{% elif not profiles %}
+    <div class="empty-state">
+        <h2>Set up a profile first</h2>
+        <p>A profile is a saved set of planner settings. The defaults are ready to use.</p>
+        <p class="empty-state-actions">
+            <a class="btn btn-primary" href="{% url 'planner:profile-create' %}">New profile</a>
+        </p>
+    </div>
+{% else %}
+    <form method="post" action="{% url 'planner:plan-generate' %}" class="stack">
+        {% csrf_token %}
+        <div class="field">
+            <label for="id_profile">Profile <span aria-hidden="true">*</span></label>
+            <select id="id_profile" name="profile" required>
+                {% for p in profiles %}
+                    <option value="{{ p.pk }}"
+                        {% if profile and p.pk == profile.pk %}selected
+                        {% elif not profile and p.pk == default_profile.pk %}selected{% endif %}>
+                        {{ p.name }}{% if p.is_default %} (default){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="id_start_date">Start date</label>
+            <input type="date" id="id_start_date" name="start_date"
+                   value="{% if start_date %}{{ start_date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
+        </div>
+        <div class="field">
+            <label for="id_days">Days (1–{{ max_days }})</label>
+            <input type="number" id="id_days" name="days" min="1" max="{{ max_days }}"
+                   value="{{ days|default:'' }}" placeholder="from profile"
+                   aria-describedby="id_days_help">
+            <div class="help-text" id="id_days_help">
+                Overrides the profile for this run only. Leave blank to use the profile&rsquo;s
+                own day count.
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Generate</button>
+        </div>
+    </form>
+
+    {% if empty_pool %}
+        <div class="mt-4">
+            {% include "planner/_partials/_empty_pool.html" with reason=empty_pool_reason %}
+        </div>
+    {% endif %}
+
+    {% if preview %}
+        <section class="plan-preview" aria-labelledby="preview-head">
+            <h2 id="preview-head">Preview</h2>
+            <p class="help-text">
+                {{ filled_count }} slot{{ filled_count|pluralize }} filled,
+                {{ unfilled_count }} still open. Nothing is saved until you press
+                &ldquo;Save this plan&rdquo;.
+            </p>
+
+            {% include "planner/_partials/_plan_grid.html" with plan=None is_owner=False mode="preview" my_dishes=None %}
+
+            <form method="post" action="{% url 'planner:plan-save' %}" class="stack plan-preview-save">
+                {% csrf_token %}
+                <input type="hidden" name="profile" value="{{ profile.pk }}">
+                <input type="hidden" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+                <input type="hidden" name="days" value="{{ days }}">
+                <input type="hidden" name="seed" value="{{ seed }}">
+                <div class="field">
+                    <label for="id_name">Name this plan (optional)</label>
+                    <input type="text" id="id_name" name="name" maxlength="200">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save this plan</button>
+                </div>
+            </form>
+        </section>
+    {% endif %}
+{% endif %}
+{% endblock %}

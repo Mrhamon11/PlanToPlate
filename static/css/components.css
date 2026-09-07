@@ -148,6 +148,7 @@ input[type="radio"] {
 
 .card {
   display: block;
+  position: relative; /* anchor for the stretched .card-link pseudo-element */
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -160,7 +161,26 @@ a.card-link {
   text-decoration: none;
 }
 
-a.card-link:hover {
+/* Stretched link: the whole card is the click target, not just the title text (N1). The
+   visible title stays the accessible anchor. Anything that must stay independently
+   interactive or selectable (badges, help text, a checkbox, a button) sits above this
+   pseudo-element via `position: relative; z-index: 1`. */
+a.card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.card > .badge,
+.card > .help-text,
+.card > .btn,
+.card > .card-select {
+  position: relative;
+  z-index: 1;
+}
+
+.card:has(a.card-link:hover) {
   filter: brightness(0.98);
   border-color: var(--color-accent);
 }
@@ -168,6 +188,34 @@ a.card-link:hover {
 a.card-link:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/* The select checkbox on a deletable plan card (B8 / B1). The checkbox gets its own leading
+   column so it never overlaps the title text, and it sits above the stretched
+   `.card-link::after` (z-index 2 > 1) so it keeps its full hit area on a phone. */
+.card-selectable {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.card-selectable > .card-select {
+  flex: 0 0 var(--tap-target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-target);
+  position: relative;
+  z-index: 2;
+}
+
+.card-selectable-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bulk-delete-form > .btn-danger {
+  margin-block-start: var(--space-3);
 }
 
 .card-grid {
@@ -1086,4 +1134,202 @@ button:disabled {
   display: flex;
   gap: var(--space-1);
   margin: 0;
+}
+
+/* --- Meal planner: week grid + slot cards (08.12) ---
+   Mobile-first: one column (days stack vertically). At 48rem the grid becomes a
+   multi-column track so a week reads across on desktop (design.md, "Plan grid":
+   "Desktop shows a week grid; mobile stacks vertically"). */
+.plan-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-block: var(--space-4);
+  padding: 0;
+}
+
+@media (min-width: 48rem) {
+  .plan-grid {
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    align-items: start;
+  }
+}
+
+.plan-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.plan-day-head {
+  font-size: 1rem;
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.plan-day-date {
+  font-weight: 400;
+  color: var(--color-text-muted, inherit);
+}
+
+.slot-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.slot-card--empty {
+  border-style: dashed;
+}
+
+.slot-card--locked {
+  border-color: var(--color-accent);
+}
+
+.slot-card-slot {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.slot-card-dish {
+  margin: 0;
+  font-weight: 600;
+}
+
+.slot-card-unfilled {
+  font-weight: 400;
+  font-style: italic;
+}
+
+.slot-card-reason,
+.slot-card-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.slot-card-tag {
+  margin: 0;
+  font-size: 0.75rem;
+  align-self: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0 var(--space-1);
+}
+
+.slot-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.slot-card-actions form {
+  margin: 0;
+}
+
+.plan-grid + .plan-preview-save,
+.plan-preview-save {
+  margin-top: var(--space-4);
+}
+
+/* Saved-plan action bar (N4): one aligned horizontal row on desktop, stacking under the
+   existing mobile breakpoint. Uniform control height, the length picker as one inline
+   group, a thin divider before the share / delete group. */
+.plan-actions {
+  align-items: center;
+}
+
+.plan-actions > form,
+.plan-actions .days-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.plan-actions .btn,
+.plan-actions select {
+  height: 2.25rem;
+}
+
+.plan-actions-divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--color-border);
+  margin-inline: var(--space-1);
+}
+
+@media (max-width: 48rem) {
+  .plan-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plan-actions-divider {
+    display: none;
+  }
+}
+
+.reason-banner ul {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-4);
+}
+
+/* --- Profile form: tag-limits rows (N2) + filterable exclusion lists (N3) --- */
+.tag-limits-widget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tag-limit-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tag-limit-row select {
+  flex: 1 1 auto;
+}
+
+.tag-limit-row input[type="number"] {
+  flex: 0 0 6rem;
+}
+
+.tag-limit-row [data-tag-limits-remove] {
+  flex: 0 0 auto;
+}
+
+.tag-limits-widget [data-tag-limits-add] {
+  align-self: flex-start;
+}
+
+.checklist-filter {
+  margin-block-end: var(--space-2);
+}
+
+.checklist-scroll {
+  max-height: 16rem;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-2);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.mt-4 {
+  margin-top: var(--space-4);
 }

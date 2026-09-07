@@ -67,6 +67,10 @@ bad fixture, a missing seed. Re-run to see if that resolved it.
 3. The test-plan coverage table: each planned test → status → `file:line` or MISSING.
 4. Any test you fixed, with the exact change.
 5. Weak tests that exist but do not assert real behaviour, with what they should assert.
-6. If FAIL: confirm the numbered work list is written to `Plan/<task>/.review-findings.md`.
-7. If PASS: delete `Plan/<task>/.review-findings.md` if it exists — the rework it described is
-   done, and it must not survive to a commit.
+6. **Write every finding to `Plan/<task>/.review-findings.md`, not just FAIL-blockers.** Your
+   chat reply does not survive to the next session. On FAIL, that is the numbered work list.
+   On PASS with weak tests or thin-but-acceptable coverage, add those under a `## Non-blocking`
+   heading (`file:line`, what is weak, what it should assert) for the orchestrator to triage.
+7. Delete `Plan/<task>/.review-findings.md` **only if you found nothing at all** — PASS and
+   no weak tests and no coverage notes. If you raised anything, leave the file for the
+   orchestrator.

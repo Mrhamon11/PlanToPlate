@@ -25,7 +25,7 @@ class MealPlanProfile(models.Model):
     # gear 2
     dish_template = models.CharField(choices=DishTemplate.choices, default=BALANCED)
     # gear 3
-    source_scope = models.CharField(choices=SourceScope.choices, default=MINE_AND_SHARED)
+    source_scope = models.CharField(choices=SourceScope.choices, default=SHARED)  # MINE / SHARED / PUBLIC
     # gear 4
     tag_limits = models.JSONField(default=dict)                   # {"chicken": 1}
     # gear 5
@@ -109,12 +109,19 @@ class PlanResult:
 **3. Fill each slot** in order, with `random.Random(seed)`:
 
 - Locked entries stay and **still consume their tag budget**, or a lock plus a limit would
-  double-count chicken.
+  double-count chicken. A locked entry reserves its dish and its tag budget **from any grid
+  position, not only positions already passed** — otherwise a single-slot re-roll (which locks
+  every other entry) can hand back a dish already used on a *later* day. Single-slot re-roll
+  also excludes the slot's own current dish; if nothing else fits, the slot keeps its dish and
+  the UI says so rather than silently changing nothing.
 - Filter the pool by remaining `tag_limits` budget.
 - For `BALANCED`, prefer dishes whose component roles cover protein + carb + vegetable; if none
   qualify, fall back to composing a dish from three separate recipes (below).
 - For `ONE_POT`, prefer dishes containing an `ONE_POT`-role recipe.
-- For `MIX`, alternate per the RNG.
+- For `MIX`, alternate per the RNG. *(Implemented 08.4 rework: per-slot alternation between a
+  `BALANCED` lean and a `ONE_POT` lean, starting phase drawn from the RNG. Each lean is a
+  preference with fallback to any dish — unlike strict `BALANCED`, which has no fallback. If a
+  finer definition was intended, revisit in 08.9+.)*
 - Weighted-random pick, then decrement budgets and mark the dish used.
 
 **4. Backtrack** — if a slot has no candidates, undo the previous slot's choice and retry with
@@ -169,6 +176,7 @@ built on it should account for the full chain.
 | `POST /api/planner/plans/generate/` | `{profile, start_date, seed?}` → a **preview**, unsaved |
 | `POST /api/planner/plans/` | Persist a previewed plan |
 | `GET/PATCH/DELETE /api/planner/plans/<id>/` | |
+| `POST /api/planner/plans/<id>/share/` · `/unshare/` · `GET /shares/` | `OwnedViewSetMixin`; owner-only; read-only for the sharee. `copy` stays `405`. |
 | `POST /api/planner/plans/<id>/regenerate/` | Respects `is_locked`; accepts a new seed |
 | `PATCH /api/planner/plans/<id>/entries/<entry_id>/` | Manual swap, lock, clear |
 | `POST /api/planner/plans/<id>/entries/<entry_id>/reroll/` | Re-roll one slot |
@@ -187,8 +195,21 @@ experiment leaves debris.
 - **Plan grid** — one card per day/slot: dish name, component recipes, time, a lock toggle, a
   re-roll button, and a manual-swap picker. Desktop shows a week grid; mobile stacks vertically.
 - **Unfilled slots** are visually obvious and carry their reason inline — this is the thing
-  that turns a frustrating failure into an actionable one.
-- **Shopping list preview** before writing, with a staples toggle.
+  that turns a frustrating failure into an actionable one. On a **saved** plan (which has no
+  per-slot reason field — see `BACKLOG.md`) a **page-level banner** above the grid carries the
+  aggregated reason(s), recomputed deterministically from the plan's own seed; a plan whose
+  pool is effectively empty shows the empty-state guidance instead of a wall of blank cards.
+- The **preview grid** links or names every dish the same way the saved grid does — a preview
+  dish is always `visible_to` the requester by construction, so it must never render as
+  "shared privately".
+- **Shopping list preview** before writing, with a staples toggle. The toggle is tri-state-free
+  — unchecking it explicitly *includes* staples; only an untouched control falls back to the
+  profile / snapshot default.
+- **Share** and **delete** controls on the saved-plan page, owner-only, using the same
+  `_share_modal` / confirm-page patterns as dishes, books and recipes. A shared plan is
+  read-only for the recipient (see "Security notes"). The planner index offers multi-select
+  delete. *(11a — edit-share — lands with the future edit-share task; not built here.)*
+- **Plan and profile cards** are clickable across their whole area, not just the title.
 
 ## Edge cases
 
@@ -196,7 +217,16 @@ experiment leaves debris.
   reason "You have no dishes yet — create one or copy a public one." The first-run experience
   must not be a blank grid with no explanation.
 - Constraints stricter than the pool: partial plan, reason per slot.
+- **Strict `BALANCED` has no dish-level fallback** (owner-confirmed, dev-test 2026-09-07). It
+  selects only a dish covering protein + carb + vegetable, or composes one from recipes; a
+  partial or one-pot dish is never substituted "close enough". Non-P/C/V shared/public dishes
+  therefore surface only under `ONE_POT` / `MIX`. This is messaging, not a behaviour change —
+  the profile form carries a one-line explainer under `dish_template`.
 - `tag_limits` referencing a deleted tag: ignored, not an error.
+- **Excluded tags** are matched against a dish's own `Dish.tags` only. A dish with no tags —
+  including a materialised auto-composed dish — is not removed by "exclude every tag". This is
+  intentional; excluded *ingredients* (checked through the flattened sub-recipe graph) are the
+  allergy filter, excluded tags are a coarse dish-level preference.
 - `no_repeat_days` excluding everything: detected and reported as the cause rather than
   presenting as an empty pool.
 - All slots locked: regeneration is a no-op, reported as such.
@@ -216,3 +246,16 @@ experiment leaves debris.
 - The seed is an integer, validated and bounded.
 - Generation is bounded in time and backtracks: it must not become a CPU denial-of-service.
   Cap the pool query and the backtrack count.
+- **Sharing a plan is read-only for the recipient and cascades read-grants to its scheduled
+  dishes and their recipe graphs** (D44 re-decision, 08.20 B1 — reversing D44's original
+  non-cascade clause; ARCHITECTURE.md decision-log write-up folded into 08.15). Cascade works
+  exactly like sharing a `Dish`: `MealPlan.share_dependencies()` returns the entries' distinct
+  dishes and `walk_dependencies` pulls their component recipes / sub-recipes / ingredients,
+  and the share is **refused** — naming the blocking dish — if a scheduled dish the plan owner
+  does not own is not already visible to the recipient. The sharee then reads the full week
+  grid and can open every dinner in it, but gets no lock / re-roll / swap / regenerate /
+  length / shopping-list control, and never sees the owner's `profile_snapshot` or profile
+  name. Share / unshare are owner-only; unsharing does not cascade back (D31). The generated
+  shopping list is **not** a share dependency — it is a separately-owned, separately-shared
+  object, and deleting a plan removes its entries but not that list. Plan copy stays out of
+  scope (`copy_children` is a documented no-op; `MealPlanViewSet.copy` is 405).

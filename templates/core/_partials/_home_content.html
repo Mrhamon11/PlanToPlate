@@ -4,9 +4,8 @@ directly for an HTMX request to the same view (core.views.HomeView). Never exten
 this is a fragment.
 
 The section links use literal paths, matching templates/_partials/_nav.html — recipes /
-dishes / books / lists have routes (tasks 04-07); planner (08) does not yet, so its card stays
-non-interactive until then. A richer dashboard (recently viewed, this week's plan, active
-list) is task 12.
+dishes / books / lists / planner all have routes (tasks 04-08). A richer dashboard (recently
+viewed, this week's plan, active list) is task 12.
 {% endcomment %}
 <h1>Welcome back, {{ user.username }}</h1>
 <p class="text-muted">Jump into PlanToPlate.</p>
@@ -28,8 +27,8 @@ list) is task 12.
         <h2>Lists</h2>
         <p class="text-muted">Shopping lists, menus, and anything else worth keeping in order.</p>
     </a>
-    <div class="card">
+    <a class="card card-link" href="/planner/">
         <h2>Planner</h2>
-        <p class="text-muted">Coming soon.</p>
-    </div>
+        <p class="text-muted">Generate a week of meals under your rules, then the shopping list.</p>
+    </a>
 </div>

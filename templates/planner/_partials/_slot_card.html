@@ -1,0 +1,79 @@
+{% comment %}
+One day/slot cell of the plan grid (08.12).
+
+Rendered inside the week grid on the full page, and returned **alone** by the per-slot HTMX
+actions (lock / reroll / manual-swap) — each targets this card by id and swaps its outerHTML,
+so no page reload.
+
+Context:
+  cell      — {card_id, day_index, slot, slot_label, entry (unsaved for a preview / real for a
+              saved plan, or None), reason (a string for an unfilled preview slot, else None)}
+  plan      — the saved MealPlan, or None for an unsaved preview
+  is_owner  — whether the viewer may act on the slot
+  mode      — "preview" or "saved"
+  my_dishes — dishes the viewer can pick for a manual swap (saved mode only)
+{% endcomment %}
+{% with entry=cell.entry %}
+<div id="{{ cell.card_id }}"
+     class="slot-card{% if not entry.dish %} slot-card--empty{% endif %}{% if entry.is_locked %} slot-card--locked{% endif %}">
+    <p class="slot-card-slot">{{ cell.slot_label }}</p>
+
+    {% if entry.dish %}
+        <p class="slot-card-dish">
+            {% if entry.dish.pk and entry.dish_visible %}
+                <a href="{{ entry.dish.get_absolute_url }}">{{ entry.dish.name }}</a>
+            {% elif entry.dish.pk and not entry.dish_visible %}
+                <span class="slot-card-hidden">A dish shared privately</span>
+            {% else %}
+                {{ entry.dish.name }}
+            {% endif %}
+        </p>
+        {% if entry.is_auto_composed or not entry.dish.pk %}
+            <p class="slot-card-tag" title="The planner built this from a protein, a carb and a vegetable recipe. Saving the plan saves it as a real dish.">Auto-composed</p>
+        {% endif %}
+        {% if entry.note %}<p class="slot-card-note">{{ entry.note }}</p>{% endif %}
+    {% else %}
+        <p class="slot-card-dish slot-card-unfilled">Empty</p>
+        {% if cell.reason %}
+            <p class="slot-card-reason" role="note">{{ cell.reason }}</p>
+        {% elif mode == "saved" %}
+            <p class="slot-card-reason" role="note">Nothing planned yet — re-roll or pick a dish.</p>
+        {% endif %}
+    {% endif %}
+
+    {% if mode == "saved" and is_owner %}
+        <div class="slot-card-actions">
+            <form method="post" action="{% url 'planner:entry-lock' plan.pk entry.pk %}"
+                  hx-post="{% url 'planner:entry-lock' plan.pk entry.pk %}"
+                  hx-target="#{{ cell.card_id }}" hx-swap="outerHTML">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-small" hx-disabled-elt="this"
+                        aria-pressed="{% if entry.is_locked %}true{% else %}false{% endif %}">
+                    {% if entry.is_locked %}Unlock{% else %}Lock{% endif %}
+                </button>
+            </form>
+            <form method="post" action="{% url 'planner:entry-reroll' plan.pk entry.pk %}"
+                  hx-post="{% url 'planner:entry-reroll' plan.pk entry.pk %}"
+                  hx-target="#{{ cell.card_id }}" hx-swap="outerHTML">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-small" hx-disabled-elt="this">Re-roll</button>
+            </form>
+            <form method="post" action="{% url 'planner:entry-swap' plan.pk entry.pk %}"
+                  hx-post="{% url 'planner:entry-swap' plan.pk entry.pk %}"
+                  hx-target="#{{ cell.card_id }}" hx-swap="outerHTML" class="slot-card-swap">
+                {% csrf_token %}
+                <label class="visually-hidden" for="{{ cell.card_id }}-swap">Swap in a dish for {{ cell.slot_label }}, day {{ cell.day_index|add:1 }}</label>
+                <select id="{{ cell.card_id }}-swap" name="dish"
+                        onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+                    <option value="">Swap / clear…</option>
+                    {% if entry.dish %}<option value="">— clear this slot —</option>{% endif %}
+                    {% for dish in my_dishes %}
+                        <option value="{{ dish.pk }}">{{ dish.name }}</option>
+                    {% endfor %}
+                </select>
+                <noscript><button type="submit" class="btn btn-small">Swap</button></noscript>
+            </form>
+        </div>
+    {% endif %}
+</div>
+{% endwith %}

@@ -62,7 +62,12 @@ regression? Is the happy path the only path tested?
    failure scenario, suggested fix.
 3. Separate **blocking** findings from **non-blocking** suggestions. Do not pad the blocking
    list with style preferences — a reviewer who blocks on taste gets ignored on substance.
-4. If REQUEST CHANGES: append the numbered blocking findings to
-   `Plan/<task>/.review-findings.md` for `p2p-dev`.
-5. If APPROVE: delete `Plan/<task>/.review-findings.md` if it exists — it must not reach a
-   commit.
+4. **Write every finding to `Plan/<task>/.review-findings.md`, not just the blocking ones.**
+   The stage that dispatched you runs in its own session and cannot rely on your chat reply
+   surviving. Use two headings: `## Blocking` (numbered) and `## Non-blocking` (each with
+   `file:line`, the issue, and a suggested disposition — "fix now", "defer to 08.9", etc.).
+   The orchestrator triages the non-blocking ones into their permanent homes.
+5. Delete `Plan/<task>/.review-findings.md` **only if you found nothing at all** — no
+   blocking and no non-blocking findings. If you raised anything, leave the file for the
+   orchestrator. It must still never reach a commit, but that is the orchestrator's job to
+   ensure, not yours.

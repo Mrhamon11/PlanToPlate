@@ -1,0 +1,33 @@
+{% comment %}
+D39-style #modal confirmation before changing a plan's `days`. Growing a plan just adds empty
+cells; **shrinking drops the entries past the new range**, which is why this asks first
+(08.12 carried note; design.md, "Edge cases": "removed days drop their entries after a
+confirmation"). No hx-confirm anywhere (D39).
+
+Context: plan, new_days, dropped (entry count that would be deleted, 0 when growing),
+apply_url, cancel_url.
+{% endcomment %}
+<div class="modal-backdrop">
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="days-confirm-title">
+        <h2 id="days-confirm-title">Change to {{ new_days }} day{{ new_days|pluralize }}?</h2>
+        {% if dropped %}
+            <p class="alert alert-warning" role="alert">
+                <strong>{{ dropped }} planned slot{{ dropped|pluralize }} beyond day {{ new_days }}
+                {{ dropped|pluralize:"is,are" }} removed.</strong> This cannot be undone.
+            </p>
+        {% else %}
+            <p>The extra day{{ new_days|pluralize }} start{{ new_days|pluralize:"s," }} empty and can be re-rolled.</p>
+        {% endif %}
+        <form method="post" action="{{ apply_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="days" value="{{ new_days }}">
+            <div class="modal-actions">
+                <a class="btn" href="{{ cancel_url }}">Cancel</a>
+                <button type="submit" class="btn {% if dropped %}btn-danger{% else %}btn-primary{% endif %}"
+                        hx-disabled-elt="this">
+                    {% if dropped %}Remove them{% else %}Add the days{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

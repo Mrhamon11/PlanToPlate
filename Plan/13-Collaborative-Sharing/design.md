@@ -65,6 +65,37 @@ lists, not maintain divergent copies.
 - Task 07's shopping-list check-off / add / reorder / clear views — currently hard-gated to
   the owner via `_owned_list`; an editor must pass. This is where concurrency shows up.
 
+## Carried-in findings
+
+From the task-08 dev-test conversation (2026-09-07). These are the reason this task's spec
+should be written **before** any more sharing UI is added piecemeal elsewhere.
+
+1. **Rethink per-individual sharing itself.** Owner: "I don't really see a reason for anything
+   other than recipes to be shared between individual users." The current model — any owned
+   object (recipe, dish, book, list, plan) shareable one-user-at-a-time with a read grant and
+   a child cascade — may be more machinery than the real use cases need. The spec should
+   decide whether individual per-object sharing narrows to just `Recipe`, with everything else
+   moving to the group model below.
+
+2. **Household / family group.** The motivating case (two people, two accounts, one shared
+   body of data) is better served by a **group** than by N pairwise shares. Concept: a user
+   group where every ingredient / recipe / dish / meal plan / list owned by any member is
+   automatically visible to every other member **and editable by them** — no per-object share
+   action at all within the group. This is the headline feature of this task, not an add-on.
+   Interacts with every open question already listed above (permission model, edit cascade,
+   concurrency, revocation = leaving the group).
+
+3. **Make-public UI discoverability.** Making an object `PUBLIC` is already possible via
+   `_partials/_share_modal.html`'s "Everyone with an account" visibility radio (wired for
+   recipe / dish / book / plan; not List, per D40). The owner flagged that it is hard to
+   find. Whatever sharing UI this task lands should make the private / group / public choice
+   obvious, and cover `List`.
+
+4. **Sort / filter a list page by access type.** Users want to configure what a list page
+   shows and order it by "mine / shared with me / public". Deferred here rather than bolted
+   onto individual index pages, because the right grouping depends on whether the group model
+   above replaces per-user shares.
+
 ## Non-goals
 
 - Real-time collaboration (presence, live cursors, CRDTs). Household scale, async edits.

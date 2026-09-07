@@ -1,0 +1,24 @@
+{% comment %}
+Shown instead of a blank grid when the planner has nothing to work with — a brand-new user
+with no dishes, or a profile whose scope / constraints leave the candidate pool empty
+(08.14; design.md, "Edge cases": "The first-run experience must not be a blank grid with no
+explanation").
+
+Context: reason? (a specific cause string, optional).
+{% endcomment %}
+<div class="empty-state" data-testid="empty-pool">
+    <h2>Nothing to plan yet</h2>
+    <p>
+        {% if reason %}
+            {{ reason }}
+        {% else %}
+            The planner builds a week from your dishes, and you don&rsquo;t have any it can use
+            yet. Create a dish, or copy a public one, then come back and press Generate.
+        {% endif %}
+    </p>
+    <p class="empty-state-actions">
+        <a class="btn btn-primary" href="{% url 'meals:dish-create' %}">Create a dish</a>
+        <a class="btn" href="{% url 'meals:dish-list' %}">Browse dishes</a>
+        <a class="btn" href="{% url 'planner:profile-list' %}">Planner profiles</a>
+    </p>
+</div>

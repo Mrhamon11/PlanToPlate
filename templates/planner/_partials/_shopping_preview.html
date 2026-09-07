@@ -1,0 +1,63 @@
+{% comment %}
+Shopping-list preview for a saved plan (08.13). Shows the aggregated ingredient lines the
+generation would write, a staples toggle that re-fetches the preview, and the task-07 warning
+when regenerating would replace items the owner has already checked off.
+
+Context: plan, lines (recipes.services.flatten.FlatLine), staples_skipped, exclude_staples
+(the effective value), checked_at_risk, preview_url, generate_url. On a visibility/planner
+failure (a planned dish unshared since save) only `error` is set — surfaced inline, not a 500.
+{% endcomment %}
+<div class="shopping-preview" data-testid="shopping-preview">
+    <h2>Shopping list preview</h2>
+
+    {% if error %}
+    <p class="alert alert-warning" role="alert">{{ error }}</p>
+    {% else %}
+    <form method="get" action="{{ preview_url }}" class="staples-toggle"
+          hx-get="{{ preview_url }}" hx-target="#shopping-preview" hx-swap="innerHTML">
+        {% comment %}
+        Always sent, so an *unchecked* box reads as an explicit "include staples" rather
+        than "unspecified → profile default" (B4).
+        {% endcomment %}
+        <input type="hidden" name="staples_toggle" value="1">
+        <label>
+            <input type="checkbox" name="exclude_staples" value="true"
+                   {% if exclude_staples %}checked{% endif %}
+                   onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+            Leave out pantry staples
+        </label>
+        <noscript><button type="submit" class="btn btn-small">Update</button></noscript>
+    </form>
+
+    {% if checked_at_risk %}
+        <p class="alert alert-warning" role="alert">
+            <strong>{{ checked_at_risk }} item{{ checked_at_risk|pluralize }} you have already checked off
+            {{ checked_at_risk|pluralize:"is,are" }} from this plan.</strong>
+            Regenerating replaces them and loses that shopping progress — it cannot be undone.
+        </p>
+    {% endif %}
+
+    {% if lines %}
+        <ul class="shopping-preview-lines" role="list">
+            {% for line in lines %}
+                <li>
+                    <span class="component-qty">{{ line.quantity|floatformat:"-3" }} {{ line.unit.abbrev }}</span>
+                    {{ line.ingredient.name }}
+                </li>
+            {% endfor %}
+        </ul>
+        {% if staples_skipped %}
+            <p class="help-text">{{ staples_skipped }} staple{{ staples_skipped|pluralize }} left out.</p>
+        {% endif %}
+        <form method="post" action="{{ generate_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="exclude_staples" value="{% if exclude_staples %}true{% else %}false{% endif %}">
+            <button type="submit" class="btn btn-primary">
+                {% if plan.shopping_list_id %}Regenerate shopping list{% else %}Generate shopping list{% endif %}
+            </button>
+        </form>
+    {% else %}
+        <p>No ingredients to buy — the planned dishes have no components yet.</p>
+    {% endif %}
+    {% endif %}
+</div>

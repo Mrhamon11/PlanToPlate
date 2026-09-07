@@ -145,6 +145,17 @@ Done item, not a suggestion.
 
 `make restore-test` automates it so it can be repeated.
 
+### Nightly prod → dev-box refresh (owner request, backlog)
+
+The same `.backup` + off-box-copy pipeline, pointed at the development machine as a second
+destination: a scheduled nightly job copies the production database (and `MEDIA_ROOT`, once
+N1 exists) to the dev box so a bug reported against prod can be reproduced against real data.
+Both boxes are on the owner's Tailnet — transfer via `tailscale file cp` or `rsync` over
+Tailscale. On the dev box: drop the file in place, then `migrate` (the dev branch may be
+ahead of prod's schema). Decide at build time whether to ship the data as-is or scrub PII
+(for 10–20 trusted household users, as-is is likely fine). Not blocking; there is no prod
+deployment yet. Tracked in `Plan/BACKLOG.md` → Operations / dev workflow.
+
 ## Logging and monitoring
 
 - Structured logging to file with rotation; request logs via Caddy.

@@ -235,7 +235,63 @@ def populate_shopping_list(
       (design.md, "Edge cases"); the UI warns before regenerating a list with checked items.
     - The whole thing is one transaction: a mid-way failure leaves ``lst`` exactly as it was.
     """
-    actor = lst.owner
+    computed = _flatten_dishes_to_lines(lst.owner, dishes, exclude_staples=exclude_staples)
+
+    with transaction.atomic():
+        replaced = 0
+        if replace_generated:
+            replaced, _ = lst.items.filter(
+                source=ItemSource.GENERATED, generated_from=source_plan
+            ).delete()
+
+        position = next_position(lst)
+        new_items: list[ListItem] = []
+        for offset, line in enumerate(computed.kept):
+            sources = computed.contributors.get(line.ingredient.pk, set())
+            provenance_dish = (
+                computed.dish_by_id[next(iter(sources))] if len(sources) == 1 else None
+            )
+            new_items.append(
+                ListItem(
+                    list=lst,
+                    position=position + offset,
+                    ingredient=line.ingredient,
+                    quantity=line.quantity,
+                    unit=line.unit,
+                    source=ItemSource.GENERATED,
+                    generated_from=source_plan,
+                    dish=provenance_dish,
+                )
+            )
+        if new_items:
+            ListItem.objects.bulk_create(new_items)
+
+    return ShoppingResult(
+        added=len(new_items),
+        replaced=replaced,
+        staples_skipped=computed.staples_skipped,
+        items=new_items,
+    )
+
+
+@dataclass(frozen=True)
+class _ShoppingLines:
+    kept: list[FlatLine]
+    contributors: dict[int, set[int]]
+    dish_by_id: dict[int, Dish]
+    staples_skipped: int
+
+
+def _flatten_dishes_to_lines(
+    actor: object, dishes: Sequence[Dish], *, exclude_staples: bool
+) -> _ShoppingLines:
+    """Flatten every dish, aggregate across all of them (one line per ingredient for the whole
+    week), drop staples if asked. Pure — reads only, writes nothing.
+
+    Shared by ``populate_shopping_list`` and ``preview_shopping_list`` so the meal planner's
+    on-screen preview and the list it eventually writes can never disagree. Raises
+    ``ListVisibilityError`` if any dish is not visible to ``actor``, before returning anything.
+    """
     requested = list(dishes)
     requested_ids = {dish.pk for dish in requested}
 
@@ -258,15 +314,16 @@ def populate_shopping_list(
     # repeated components naturally. No dish-level dedupe: ``add_dish_to_list`` twice already
     # yields 2x, and a short shopping line is the exact failure this task exists to prevent
     # (07.1 review, finding 2).
-    ordered = requested
     components = [
-        (dish.pk, component) for dish in ordered for component in visible[dish.pk].components.all()
+        (dish.pk, component)
+        for dish in requested
+        for component in visible[dish.pk].components.all()
     ]
     # Every component recipe's whole sub-recipe / ingredient graph, prefetched in one bounded
     # batch — so ``flatten_recipe`` below reuses it rather than re-fetching per component (the
-    # N+1 ``test_populate_query_count`` guards against). ``viewer`` is not consulted: every dish
-    # is already confirmed visible to the actor, and this is the trusted "walking its owner's
-    # own dishes" path (``meals.services.dishes.flatten_dish``).
+    # N+1 ``test_populate_query_count`` guards against). ``actor`` is not re-consulted here:
+    # every dish is already confirmed visible to it above, and this is the trusted "walking its
+    # owner's own dishes" path (``meals.services.dishes.flatten_dish``).
     recipe_ids = {component.recipe_id for _, component in components}
     graph_recipes = {
         recipe.pk: recipe
@@ -281,50 +338,43 @@ def populate_shopping_list(
             contributors.setdefault(line.ingredient.pk, set()).add(dish_pk)
             all_lines.append(line)
 
-    aggregated = aggregate(all_lines)
     kept: list[FlatLine] = []
     staples_skipped = 0
-    for line in aggregated:
+    for line in aggregate(all_lines):
         if exclude_staples and line.ingredient.is_staple:
             staples_skipped += 1
             continue
         kept.append(line)
 
-    dish_by_id = {dish.pk: visible[dish.pk] for dish in ordered}
-
-    with transaction.atomic():
-        replaced = 0
-        if replace_generated:
-            replaced, _ = lst.items.filter(
-                source=ItemSource.GENERATED, generated_from=source_plan
-            ).delete()
-
-        position = next_position(lst)
-        new_items: list[ListItem] = []
-        for offset, line in enumerate(kept):
-            sources = contributors.get(line.ingredient.pk, set())
-            provenance_dish = dish_by_id[next(iter(sources))] if len(sources) == 1 else None
-            new_items.append(
-                ListItem(
-                    list=lst,
-                    position=position + offset,
-                    ingredient=line.ingredient,
-                    quantity=line.quantity,
-                    unit=line.unit,
-                    source=ItemSource.GENERATED,
-                    generated_from=source_plan,
-                    dish=provenance_dish,
-                )
-            )
-        if new_items:
-            ListItem.objects.bulk_create(new_items)
-
-    return ShoppingResult(
-        added=len(new_items),
-        replaced=replaced,
+    return _ShoppingLines(
+        kept=kept,
+        contributors=contributors,
+        dish_by_id={dish.pk: visible[dish.pk] for dish in requested},
         staples_skipped=staples_skipped,
-        items=new_items,
     )
+
+
+@dataclass(frozen=True)
+class ShoppingPreview:
+    """What ``populate_shopping_list`` *would* write, without writing it — the meal planner's
+    "see the ingredients before committing" (task 08 ``design.md``, "API":
+    ``preview-shopping-list``).
+    """
+
+    lines: list[FlatLine]
+    staples_skipped: int
+
+
+def preview_shopping_list(
+    owner: object, dishes: Sequence[Dish], *, exclude_staples: bool = True
+) -> ShoppingPreview:
+    """The aggregated ingredient lines for ``dishes`` — nothing is written, no list is touched.
+
+    Runs the exact flatten / aggregate / staples path ``populate_shopping_list`` uses, so a
+    preview never disagrees with the list a subsequent write produces.
+    """
+    computed = _flatten_dishes_to_lines(owner, dishes, exclude_staples=exclude_staples)
+    return ShoppingPreview(lines=computed.kept, staples_skipped=computed.staples_skipped)
 
 
 # --- merge / clear -------------------------------------------------------------------------

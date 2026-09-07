@@ -280,6 +280,21 @@ def test_index_counts_do_not_leak_invisible_content(client, make_list, make_reci
     assert "Secret Sauce" not in body
 
 
+def test_list_index_shows_ownership_badges(client, make_list, alice, bob):
+    """The kind-grouped list index badges each row Mine / Shared with me / Public
+    (``_ownership_badge.html``; 08.20 B3 audit — already wired since task 07, pinned here)."""
+    make_list("My List", owner=bob, kind=ListKind.GENERIC)
+    shared = make_list("Shared List", owner=alice, kind=ListKind.GENERIC, visibility="SHARED")
+    shared.shared_with.add(bob)
+    make_list("Public List", owner=alice, kind=ListKind.GENERIC, visibility="PUBLIC")
+
+    body = _login(client, bob).get(reverse("lists:index")).content.decode()
+
+    assert "badge-mine" in body
+    assert "Shared with me" in body
+    assert "Public" in body
+
+
 # --- generic list reordering --------------------------------------------------------------
 
 
