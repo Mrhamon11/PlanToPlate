@@ -57,10 +57,10 @@
   Lighthouse, query-count regression tests, asset minification and cache headers.
   *Files:* various
 
-- [ ] ~~**N4.14 — Recently viewed**~~ → **moved to [task 12](../12-Home-Dashboard/tasks.md) (12.1–12.3, 12.7).**
-  It is the same feature, and it belongs with the rest of the home dashboard rather than
-  arriving in the final polish pass. Nothing to do here — verify task 12 delivered it and
-  strike this line.
+- [x] ~~**N4.14 — Recently viewed**~~ → **delivered in [task 12](../12-Home-Dashboard/tasks.md) (12.1–12.3, 12.7).**
+  `core.RecentView` + `core.services.recent`, recorded by `RecordsRecentView` on the recipe /
+  dish / book detail views, surfaced as the dashboard's "Recently viewed" panel. Nothing left
+  to do here.
 
 - [ ] **N4.15 — Update the living document**
   **Project complete.**

@@ -35,6 +35,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from core.models import Visibility
+from core.services.dashboard import EmptyPanel
 
 
 class OwnedSerializer(serializers.ModelSerializer):
@@ -59,3 +60,107 @@ class OwnedSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict[str, Any]) -> Any:
         validated_data["owner"] = self.context["request"].user
         return super().create(validated_data)
+
+
+# --- Home dashboard (task 12) -------------------------------------------------------------
+#
+# Read-only projections of ``core.services.dashboard.DashboardContext`` and its panel
+# dataclasses. ``GET /api/dashboard/`` serialises exactly what the HTMX home page renders —
+# one panel implementation, two renderings (``ARCHITECTURE.md`` section 6). Nothing here is
+# writable: the API is a mirror of the service, never a second way to change anything.
+
+
+class ObjectCardSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    name = serializers.CharField()
+    url = serializers.CharField()
+    owner_username = serializers.CharField(allow_null=True)
+
+
+class SectionCountSerializer(serializers.Serializer):
+    label = serializers.CharField()
+    url = serializers.CharField()
+    count = serializers.IntegerField()
+
+
+class PlannedSlotSerializer(serializers.Serializer):
+    slot = serializers.CharField()
+    slot_label = serializers.CharField()
+    dish_name = serializers.CharField(allow_null=True)
+    dish_url = serializers.CharField(allow_null=True)
+
+
+class PlannedDaySerializer(serializers.Serializer):
+    date = serializers.DateField()
+    day_index = serializers.IntegerField()
+    is_today = serializers.BooleanField()
+    slots = PlannedSlotSerializer(many=True)
+
+
+class ThisWeekPanelSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField()
+    plan_name = serializers.CharField()
+    plan_url = serializers.CharField()
+    days = PlannedDaySerializer(many=True)
+
+
+class ShoppingItemSerializer(serializers.Serializer):
+    """One preview line of the shopping panel — decorated by ``lists.services.annotate_display``."""
+
+    label = serializers.CharField(source="display_label")
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=3, allow_null=True)
+    hidden = serializers.BooleanField(source="content_hidden")
+    unit = serializers.SerializerMethodField()
+
+    def get_unit(self, item: Any) -> str | None:
+        return item.unit.abbrev if item.unit_id else None
+
+
+class AisleGroupSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    items = ShoppingItemSerializer(many=True)
+
+
+class ShoppingPanelSerializer(serializers.Serializer):
+    list_id = serializers.IntegerField()
+    name = serializers.CharField()
+    url = serializers.CharField()
+    checked = serializers.IntegerField()
+    total = serializers.IntegerField()
+    hidden_unchecked = serializers.IntegerField()
+    groups = AisleGroupSerializer(many=True)
+
+
+class EmptyPanelSerializer(serializers.Serializer):
+    """A flagship panel with nothing to show yet — carries only the forward URL for its CTA
+    (``core.services.dashboard.EmptyPanel``). "This week" / "Shopping" always carry a payload,
+    never ``null`` (``design.md`` panel table).
+    """
+
+    forward_url = serializers.CharField()
+
+
+class DashboardSerializer(serializers.Serializer):
+    this_week = serializers.SerializerMethodField()
+    shopping = serializers.SerializerMethodField()
+    recently_viewed = ObjectCardSerializer(many=True)
+    favourites = ObjectCardSerializer(many=True)
+    shared_with_you = ObjectCardSerializer(many=True)
+    public_from_others = ObjectCardSerializer(many=True)
+    suggestion = ObjectCardSerializer(allow_null=True)
+    sections = SectionCountSerializer(many=True)
+    show_get_started = serializers.BooleanField()
+
+    @extend_schema_field(ThisWeekPanelSerializer)
+    def get_this_week(self, ctx: Any) -> dict[str, Any]:
+        panel = ctx.this_week
+        if isinstance(panel, EmptyPanel):
+            return EmptyPanelSerializer(panel).data
+        return ThisWeekPanelSerializer(panel).data
+
+    @extend_schema_field(ShoppingPanelSerializer)
+    def get_shopping(self, ctx: Any) -> dict[str, Any]:
+        panel = ctx.shopping
+        if isinstance(panel, EmptyPanel):
+            return EmptyPanelSerializer(panel).data
+        return ShoppingPanelSerializer(panel).data

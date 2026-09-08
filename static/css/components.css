@@ -1333,3 +1333,132 @@ button:disabled {
 .mt-4 {
   margin-top: var(--space-4);
 }
+
+/* --- Home dashboard (task 12) --- */
+
+.dashboard-intro {
+  margin-block-end: var(--space-4);
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@media (min-width: 640px) {
+  .dashboard {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.panel {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+
+.panel > * + * {
+  margin-block-start: var(--space-2);
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.panel-head h2 {
+  font-size: 1.125rem;
+  margin: 0;
+}
+
+.panel-head-link {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.panel ul,
+.panel ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.panel-progress {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.panel-day + .panel-day {
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.panel-day--today .panel-day-date {
+  font-weight: 600;
+}
+
+.panel-day-date {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.panel-day-slot {
+  display: inline-block;
+  min-width: 5rem;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.panel-aisle {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-muted);
+  margin-block-start: var(--space-2);
+}
+
+.panel-items li,
+.panel-cards li,
+.panel-sections li {
+  padding-block: var(--space-1);
+}
+
+.panel-card-kind {
+  display: inline-block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-muted);
+  margin-inline-end: var(--space-1);
+}
+
+.panel-suggestion-dish {
+  font-size: 1.125rem;
+}
+
+.panel-sections li a {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.panel-section-count {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}

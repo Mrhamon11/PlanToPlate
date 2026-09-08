@@ -96,6 +96,23 @@ should be written **before** any more sharing UI is added piecemeal elsewhere.
    onto individual index pages, because the right grouping depends on whether the group model
    above replaces per-user shares.
 
+5. **Narrowing access never cascades down — decide the rule for whatever model survives.**
+   (Task 12 dev test, 2026-09-07 — owner request.) Granting access cascades down the owned
+   graph; revoking / narrowing does not (D31, and [[11.11]]). Today this strands children on
+   every path: recipe → sub-recipe, dish → recipes, book → recipes, plan → dish → recipes.
+   Real incident: a demo dish reverted from `PUBLIC` left its component recipes `PUBLIC`, so a
+   brand-new account saw them on its dashboard.
+   - If per-object individual sharing narrows to `Recipe` + a group model (findings 1–2), the
+     dish / book / plan legs **evaporate** — those objects go private-or-group-visible and
+     leaving a group drops all access atomically. The spec should confirm this is the outcome
+     and say so explicitly, so [[11.11]] can be closed for those legs.
+   - What does **not** evaporate: reverting `PUBLIC` on any model that can still be made
+     `PUBLIC` (finding 3 keeps the public option for recipe / dish / book / plan). The spec
+     must decide — un-publish a container and either (a) its owned children stay `PUBLIC`
+     (keep D31, document it as intended), or (b) offer the "also un-publish these children that
+     aren't reachable from another public root: ☐ ☐" confirm step. This is the one piece of
+     [[11.11]] that this task cannot avoid owning.
+
 ## Non-goals
 
 - Real-time collaboration (presence, live cursors, CRDTs). Household scale, async edits.

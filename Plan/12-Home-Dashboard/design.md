@@ -38,7 +38,8 @@ Ordered by how often the answer is the one the user came for.
 | **Shopping** | The default shopping list: checked/total progress, and the first handful of unchecked items grouped as the list page groups them. | "Nothing on the list" → link to the list. |
 | **Recently viewed** | The last ~8 recipes / dishes / books this user opened, newest first. | Hidden entirely — a brand-new user should not see an empty box. |
 | **Favourites** | Favourited recipes and dishes from `RecipeStats` / `DishStats`. | Hidden entirely. |
-| **Shared with you** | Objects owned by someone else that this user can currently see. | Hidden entirely. |
+| **Shared with you** | Objects another user has **explicitly shared** with this user (`shared_with` contains them). Shows the object and its owner's username only. | Hidden entirely. |
+| **Public from others** | Objects owned by someone else that this user can see **only because they are `PUBLIC`** — not explicitly shared with them. Separate from "Shared with you" so the share panel means what its title says. | Hidden entirely. |
 | **What should I make?** | One randomly chosen visible dish, re-rollable. | Hidden when the user can see no dishes. |
 | **Sections** | The five section links, each with a count ("42 recipes"). | Always shown — this is the floor the dashboard degrades to. |
 
@@ -153,13 +154,16 @@ per row.
   object can also have been unshared since.
 - **"Shared with you" must not leak the share audience.** It lists objects, and per D35 the
   `shared_with` list is owner-only — the panel shows the object and its owner's username,
-  never who else it was shared with.
+  never who else it was shared with. The same rule binds "Public from others".
+- **"Shared with you" is narrowed to explicit shares** (`shared_with=user`), and "Public from
+  others" is `visible_to(user)` minus (owner=user, system, and the explicitly-shared rows) —
+  so an object appears in exactly one of the two panels, never both.
 
 ## Carried-in findings
 
 - **`MealPlanSerializer.get_entries` is N+1 across plans.** (Task 08 review, 2026-09-06.)
-  `planner/serializers.py` builds `_entry_context` per plan, running one
-  `Dish.objects.visible_to(user)` query for each plan row. Harmless at 10–20 users today, but
-  this task adds a panel that lists a user's plans and will make the N+1 visible. When
-  building that panel, resolve visible dishes once page-wide and thread the cache through the
-  serializer context rather than per-plan.
+  Anticipated a "list of the user's plans" panel that would make this visible. Task 12 built
+  no such panel — "This week" resolves its visible dishes in one page-wide query — so the
+  finding was never triggered here. The planner-serializer N+1 itself is untouched and still
+  latent. Moved to `Plan/BACKLOG.md` → Robustness (task 12 reviewer, 2026-09-07) so it
+  survives task 12 closing.

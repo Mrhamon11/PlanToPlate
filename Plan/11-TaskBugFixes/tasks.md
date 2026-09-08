@@ -106,17 +106,39 @@ need a full design) only when a subtask is actually picked up.
   comment. `Plan/09-Admin-Control-Center/design.md`'s example payload already assumes
   `"yield_unit": "serving"` exists.
 
-- [ ] **11.11 — Revoking a share / making a recipe private does not cascade to sub-recipes**
+- [ ] **11.11 — Revoking a share / narrowing visibility does not cascade down the object graph**
   *Found in:* task 05 dev test, `core/services/sharing.py` (`unshare`, and the visibility-down
-  path in `share`).
-  *Issue:* granting access cascades down the sub-recipe DAG (sharing or publishing a
-  super-recipe pulls in its sub-recipes); **revoking does not**. Unshare a super-recipe and its
-  sub-recipes stay shared; set a public super-recipe back to private and its sub-recipes stay
-  public. Blind reverse-cascade is wrong — a sub-recipe may still back *another* recipe that is
-  legitimately shared/public — so this needs a small UI (an "also revoke access to these
-  sub-recipes: ☐ ☐" list, defaulting to the ones not reachable from any other still-shared
-  root) plus the service work to apply the user's selection. Task 03 territory; write the
-  design slice when picked up.
+  path in `share` / `set_visibility`); re-confirmed task 12 dev test, 2026-09-07.
+  *Issue:* granting access cascades **down** the owned-object graph — sharing or publishing a
+  container pulls in every dependency the actor owns — but **revoking does not** (the deliberate
+  asymmetry logged as D31). This applies on every cascade path, not just recipe → sub-recipe:
+  - **Recipe → sub-recipe** — unshare / privatise a super-recipe, its sub-recipes stay granted.
+  - **Dish → component recipes → sub-recipes** — a dish reverted from `PUBLIC`/shared leaves its
+    recipes granted.
+  - **RecipeBook → entry recipes** — same.
+  - **MealPlan → scheduled dishes → recipe graphs** (D47) — same.
+
+  *Concrete incident (task 12 dev test):* `avi`'s two demo dishes were `PUBLIC` at seed time;
+  `_cascade_grant_public` flipped their five component recipes to `PUBLIC`. The dishes were
+  later reverted to `PRIVATE`/`SHARED`; the recipes stayed `PUBLIC` and so were visible on a
+  brand-new account's dashboard ("Public from others" + section counts). The dashboard was
+  correct — `visible_to` faithfully returns `PUBLIC` rows to every account — the strand is here.
+
+  *Why not a blind reverse-cascade:* a dependency may still back **another** container that is
+  legitimately shared/public. The fix needs the reachability computation ("which of these
+  children are not reachable from any other still-shared/public root") plus a small confirm UI
+  ("also revoke access to these: ☐ ☐", defaulting to the safe set) on every revoke/narrow path,
+  and it reverses D31.
+
+  *Scope is a task 13 decision — do not build this leg standalone first.* Task 13
+  (`Plan/13-Collaborative-Sharing/design.md`) is expected to narrow per-object individual
+  sharing to `Recipe` only and move households onto a group model (its carried-in findings 1–2).
+  If it does, the Dish / Book / Plan → recipe legs above **disappear** — those objects become
+  private-or-group-visible, and leaving a group drops all access atomically with nothing
+  stranded. What survives task 13 regardless: **reverting `PUBLIC` on any still-`PUBLIC`-capable
+  container does not un-publish its children** (D31). That residual is flagged as an explicit
+  spec item in task 13's carried-in finding 5; resolve it there. Pick this subtask up only for
+  the `Recipe`-level legs, and only after task 13's sharing model is settled.
 
 - [ ] **11.12 — Recipe list filter panel is too cluttered; collapse it behind a disclosure**
   *Found in:* task 05 dev test, `templates/recipes/recipe_list.html`.

@@ -29,7 +29,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from catalog.models import Tag
-from core.mixins import HtmxTemplateMixin, OwnedObjectMixin
+from core.mixins import HtmxTemplateMixin, OwnedObjectMixin, RecordsRecentView
 from core.services.copying import copy_object
 from core.services.graph import GraphError
 from core.services.sharing import SharingError, share, unshare
@@ -144,7 +144,7 @@ class DishListView(LoginRequiredMixin, OwnedObjectMixin, HtmxTemplateMixin, List
 # --- Dish: detail ---------------------------------------------------------------------------
 
 
-class DishDetailView(LoginRequiredMixin, OwnedObjectMixin, DetailView):
+class DishDetailView(LoginRequiredMixin, OwnedObjectMixin, RecordsRecentView, DetailView):
     """Each component recipe with its servings, the combined (flattened, aggregated) ingredient
     list, the "I made this" / rating / favourite widgets, and the task 03 share / copy
     controls. Component recipes the viewer can no longer see are dropped, never leaked (D31).
@@ -484,7 +484,9 @@ def _book_detail_context(
     }
 
 
-class RecipeBookDetailView(LoginRequiredMixin, OwnedObjectMixin, HtmxTemplateMixin, DetailView):
+class RecipeBookDetailView(
+    LoginRequiredMixin, OwnedObjectMixin, RecordsRecentView, HtmxTemplateMixin, DetailView
+):
     model = RecipeBook
     template_name = "meals/recipebook_detail.html"
     partial_template_name = "meals/_partials/_book_sections.html"

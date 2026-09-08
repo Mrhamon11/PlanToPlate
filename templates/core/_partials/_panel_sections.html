@@ -1,0 +1,20 @@
+{% comment %}
+"Browse" dashboard panel (12.11) — the five section links, each with a visibility-scoped
+count. Always rendered: this is the floor the dashboard degrades to when every other panel is
+empty (design.md, "The panels"). Returned alone by core:dashboard-panel "sections".
+
+Context: dashboard.sections — SectionCount[] (label, url, count). Always five entries.
+{% endcomment %}
+<section class="panel panel--sections" id="panel-sections" aria-labelledby="panel-sections-head">
+    <div class="panel-head"><h2 id="panel-sections-head">Browse</h2></div>
+    <ul role="list" class="panel-sections">
+        {% for section in dashboard.sections %}
+            <li>
+                <a href="{{ section.url }}">
+                    <span class="panel-section-label">{{ section.label }}</span>
+                    <span class="panel-section-count">{{ section.count }}</span>
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+</section>

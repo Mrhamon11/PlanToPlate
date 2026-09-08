@@ -61,6 +61,12 @@ planned task. Each line: what, where it came from, why it is not urgent.
   one `visible_to` dish-id query per plan in the list. Fine at this project's scale (10-20
   users, few plans) but it will drift. Resolve visible-dish-ids once across the whole page
   like `lists.serializers.visible_item_target_caches` does.
+  *(Task 12 review, 2026-09-07.)* Task 12's `design.md` carried this as a "Carried-in finding"
+  expecting the dashboard to add a panel listing a user's plans and thereby expose the N+1.
+  That panel was not built — "This week" handles a single plan and the dashboard API uses its
+  own `ThisWeekPanelSerializer`, not `MealPlanSerializer` — so the N+1 is neither fixed nor
+  newly exposed. It lives here now; task 12's `design.md` will stop being read once the task
+  closes.
 
 - **`is_auto_composed` on a saved plan is detected by `notes` string equality.** (Task 08
   review, 2026-09-06.) `planner/views.py:456-458` and
@@ -125,6 +131,84 @@ planned task. Each line: what, where it came from, why it is not urgent.
   reachable if such a graph exists at all, which the write-path cycle/depth guard is supposed
   to prevent — hence non-blocking. Fix: either match `flatten`'s raise, or add a comment
   stating the truncation is intentional and safe because the write path is guarded.
+
+## Home dashboard — follow-ups
+
+- **`_suggestion` uses `Dish.objects.order_by("?")`.** (Task 12.10 dev run, 2026-09-07.)
+  `core/services/dashboard.py::_suggestion` does a full-table random sort to pick "what should
+  I make?". Fine at this project's scale (a household's dish library is small); if a library
+  ever grows large this is the line to revisit — swap for `random` over a cheap id list, or a
+  count + offset. Not urgent.
+
+- **Pre-existing `ruff format` drift on `master`.** (Noticed during task 12, 2026-09-07.)
+  `planner/serializers.py` and `planner/tests/test_views.py` report formatting drift from the
+  committed task-08 merge (`ff4510b`) — not task 12's code. `uv run ruff format` on just those
+  two files, as a standalone commit on `master`, clears it. Flagged not fixed here to keep the
+  task-12 diff clean.
+
+- **`_this_week` can hide a still-active plan when a more-recently-*started* plan has ended.**
+  (Task 12 review, 2026-09-07.) `core/services/dashboard.py::_this_week` takes the single
+  most-recently-started owned plan with `start_date <= today`; if that one has already ended it
+  returns the empty state without considering an older, longer plan that still covers today.
+  Needs two overlapping owned plans (a short plan layered over a week) — uncommon but possible.
+  Fix: annotate a computed end date (`start_date + days - 1`) and filter to plans whose end is
+  `>= today` before `order_by("-start_date").first()`.
+
+- **Shopping panel renders for an empty / fully-checked default list** instead of the design's
+  "Nothing on the list" empty state. (Task 12 review, 2026-09-07.)
+  `core/services/dashboard.py::_shopping` returns a `ShoppingPanel` whenever a default list
+  exists, regardless of item count; the template then shows "0 of 0 items checked". Cosmetic —
+  arguably consistent with the design's stated empty state. Tighten only if the empty panel
+  looks wrong in the fedora-headless walkthrough.
+
+- **Test gaps in the dashboard panels.** (Task 12 review, 2026-09-07.)
+  (a) Shopping panel: no direct test of `SHOPPING_PREVIEW_LIMIT` truncation, `group_by_aisle`
+  output, checked-items-excluded, or the `hidden_unchecked` "+ N more" count — exercised only
+  indirectly through `test_dashboard_query_count`. Add
+  `test_shopping_panel_preview_is_capped_and_grouped`.
+  (b) `_this_week`: `_SLOT_ORDER` slot ordering (breakfast/lunch/dinner within a day) and the
+  overlapping-plan case above are untested.
+
+- **`test_viewing_twice_updates_not_appends` asserts `viewed_at >= first`, not `>`.**
+  (Task 12 review, 2026-09-07; already noted in `Plan/12-Home-Dashboard/tasks.md` 12.7.)
+  A "timestamp stops bumping" regression slips through if both writes land in one clock tick.
+  Needs `freezegun` / `time-machine` (a new test-only dependency — owner sign-off) to pin the
+  clock and assert a strict bump. Fold into the N4 polish pass.
+
+- **`EmptyPanel` vs real-panel discrimination is by attribute presence.** (Task 12 re-review,
+  2026-09-07.) `_panel_this_week.html` / `_panel_shopping.html` branch on
+  `{% if dashboard.this_week.forward_url %}`; `core/serializers.py` branches on
+  `isinstance(..., EmptyPanel)`. The template side relies on a missing attribute resolving to
+  an empty string via `string_if_invalid`. Works today; a `string_if_invalid` change or a
+  stray `forward_url` attribute would flip the branch silently. Fix: add an explicit
+  `is_empty` flag to the panel dataclasses, or hand the template distinct context keys.
+
+- **`_shared_with_you` does not `.exclude(is_system=True)`** whereas `_public_from_others`
+  does. (Task 12 re-review, 2026-09-07.) `core/services/dashboard.py` — a system object with
+  the requester in its `shared_with` would surface in "Shared with you". Practically
+  unreachable today (system objects are seeded, never shared through the API); the asymmetry
+  is a latent trap if sharing of system objects is ever added. One `.exclude` call; add a
+  test alongside. Fold into the N4 polish pass.
+
+- **`test_home_dashboard_cards` does not assert the per-section counts.**
+  (Task 12 re-review, 2026-09-07.) `core/tests/test_templates.py` — `test-plan.md` 12.11 says
+  this test was "updated … now with counts", but it still only asserts the five links resolve
+  and no "Coming soon." remains. Service-layer coverage exists
+  (`test_dashboard.py::test_section_counts_are_visibility_scoped`), so a dropped
+  `SectionCount.count` in the markup is still caught there — only the template assertion is
+  missing. Either add one count assertion or correct the test-plan wording.
+
+- **`test_dashboard_query_count` uses a ceiling (`django_assert_max_num_queries(26)`), not an
+  exact count.** (Task 12 re-review, 2026-09-07.) `core/tests/test_dashboard.py`. A regression
+  that adds queries while staying ≤ 26 slips through. `tasks.md` 12.15 calls 26 the measured
+  floor — if so, `django_assert_num_queries(26)` is the stronger assertion. Tighten when the
+  number is next re-measured.
+
+- **`DashboardPanelView` rebuilds the whole dashboard to render one fragment.**
+  (Task 12 re-review, 2026-09-07.) `core/views.py` — `build_dashboard()` runs every panel
+  (~26 queries) to return a single panel's HTML. Only the "suggestion" re-roll uses it today,
+  so the cost is one wasteful request per re-roll. Related to `tasks.md` 12.13 (N5, unlinked
+  panel names). When more panels get in-place refresh, build only the requested panel.
 
 ## New features — need their own task folder
 
@@ -191,3 +275,12 @@ planned task. Each line: what, where it came from, why it is not urgent.
   `_state` or a prefetch cache could make the relaxed pool disagree with a real one. Cleaner
   to pass an explicit override kwarg (e.g. `no_repeat_days_override`) into
   `build_candidate_pool` instead of copying the instance. No planned task owns this.
+
+- **`MealPlanSerializer.get_entries` is N+1 across plans.** (Task 08 review 2026-09-06;
+  moved here by the task 12 reviewer, 2026-09-07.) `planner/serializers.py` builds
+  `_entry_context` per plan, running one `Dish.objects.visible_to(user)` query per plan row.
+  Originally parked in `Plan/12-Home-Dashboard/design.md` on the assumption task 12 would add
+  a "list of plans" panel to expose it — it did not, so the finding needs a home that outlives
+  task 12. Harmless at 10–20 users; fix by resolving visible dishes once page-wide and
+  threading the cache through the serializer context. Best folded into any future
+  planner-serializer rework.

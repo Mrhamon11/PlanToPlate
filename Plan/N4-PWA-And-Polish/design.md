@@ -62,6 +62,17 @@ Driven by actual use of the MVP, but the expected list:
 - **Cook mode** on recipe detail: large text, screen-wake-lock, step-by-step. The single
   highest-value polish item in a *cooking* app, and worth doing even if nothing else here is.
 
+### Carried-in findings
+
+- **`test_viewing_twice_updates_not_appends` asserts `>=`, not `>`.** (Task 12 reviews
+  2026-09-07.) `core/tests/test_recent.py` cannot prove the `viewed_at` timestamp *bumps* on
+  a re-view without controllable time; neither `freezegun` nor `time-machine` is a project
+  dependency and adding one needs sign-off. The bump was verified to work in practice
+  (Django 5.2.17, `update_or_create` + `auto_now`), so this is a test-strength gap, not a
+  live bug. When this polish pass adds a "viewed 3h ago" relative-timestamp caption to the
+  Recently-viewed panel, pull in `freezegun`/`time-machine` (with dependency sign-off) and
+  tighten the assertion to `>`.
+
 ## Accessibility audit
 
 Task 02 built the foundations; this verifies them across every screen actually built.

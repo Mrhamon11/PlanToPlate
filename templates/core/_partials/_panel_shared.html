@@ -1,0 +1,22 @@
+{% comment %}
+"Shared with you" dashboard panel (12.9). Objects owned by someone else that this user can
+currently see, most-recently-updated first. The card carries the owner's username and nothing
+else about the share — the rest of the audience is owner-only (D35), and ObjectCard has no
+handle on it to leak. Adds no logic. Returned alone by core:dashboard-panel "shared".
+
+Context: dashboard.shared_with_you — ObjectCard[] (kind, name, url, owner_username).
+{% endcomment %}
+<section class="panel" id="panel-shared" aria-labelledby="panel-shared-head">
+    <div class="panel-head"><h2 id="panel-shared-head">Shared with you</h2></div>
+    <ul role="list" class="panel-cards">
+        {% for card in dashboard.shared_with_you %}
+            <li>
+                <a href="{{ card.url }}">
+                    <span class="panel-card-kind">{{ card.kind }}</span>
+                    {{ card.name }}
+                </a>
+                <span class="text-muted">from {{ card.owner_username }}</span>
+            </li>
+        {% endfor %}
+    </ul>
+</section>
