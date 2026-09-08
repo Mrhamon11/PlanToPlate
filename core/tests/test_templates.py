@@ -72,6 +72,163 @@ def test_home_dashboard_cards(client, user_factory):
     assert "Coming soon." not in content
 
 
+def test_new_user_home_is_not_blank(client, carol):
+    """A brand-new user with no data gets the five section links and one "get started" line —
+    never an empty panel box, never a page that reads as broken (12.12).
+
+    The two flagship panels still render (as a one-line CTA), because "what am I cooking, and
+    what do I need to buy?" is the question the page exists to answer even before there is an
+    answer (blocking finding #1); the other five secondary panels stay hidden when empty.
+    """
+    client.force_login(carol)
+
+    content = client.get(reverse("core:home")).content.decode()
+
+    assert "add your first recipe" in content
+    for path in ("/recipes/", "/dishes/", "/books/", "/lists/", "/planner/"):
+        assert f'href="{path}"' in content
+    # The flagship panels render their empty-state CTA.
+    assert "This week" in content
+    assert "Shopping" in content
+    assert "No plan yet" in content
+    assert "Nothing on the list" in content
+    generate_url = reverse("planner:plan-generate")
+    assert f'href="{generate_url}"' in content
+    # No secondary panel with nothing to say is rendered.
+    for heading in (
+        "Recently viewed",
+        "Favourites",
+        "Shared with you",
+        "Public from others",
+        "What should I make?",
+    ):
+        assert heading not in content
+
+
+def test_panels_render_without_htmx(
+    client,
+    alice,
+    bob,
+    make_plan,
+    add_entry,
+    dish_with_component,
+    make_list,
+    make_recipe,
+    make_ingredient,
+    gram,
+    set_favourite,
+    share_with,
+):
+    """The plain test client — no HX-Request header — gets every panel's content in the first
+    response. No hx-trigger="load" anywhere (the task 02 no-JS rule): the dashboard must be
+    complete without JavaScript.
+    """
+    import datetime
+
+    from django.utils import timezone
+
+    from core.services.recent import record_view
+    from lists.models import ListItem, ListKind
+    from planner.models import MealSlot
+
+    today = timezone.localdate()
+    plan = make_plan(owner=alice, start_date=today - datetime.timedelta(days=1), days=7)
+    add_entry(
+        plan, day_index=1, slot=MealSlot.DINNER, dish=dish_with_component("Tonight", owner=alice)
+    )
+    shopping = make_list(
+        "Groceries", owner=alice, kind=ListKind.SHOPPING, is_default_shopping_list=True
+    )
+    ListItem.objects.create(list=shopping, position=0, text="milk")
+    ListItem.objects.create(
+        list=shopping,
+        position=1,
+        ingredient=make_ingredient("Carrots", owner=alice),
+        quantity="500",
+        unit=gram,
+    )
+    recipe = make_recipe("Viewed recipe", owner=alice)
+    record_view(alice, recipe)
+    set_favourite(alice, recipe)
+    share_with(make_recipe("From bob", owner=bob), alice)
+
+    from core.models import Visibility
+
+    public = make_recipe("Bob public recipe", owner=bob)
+    public.visibility = Visibility.PUBLIC
+    public.save(update_fields=["visibility"])
+
+    client.force_login(alice)
+
+    content = client.get(reverse("core:home")).content.decode()
+
+    for heading in (
+        "This week",
+        "Shopping",
+        "Recently viewed",
+        "Favourites",
+        "Shared with you",
+        "Public from others",
+        "What should I make?",
+        "Browse",
+    ):
+        assert heading in content
+    assert "Tonight" in content
+    assert "Viewed recipe" in content
+    assert "From bob" in content
+    assert "Bob public recipe" in content
+    # The shopping preview renders a real item's resolved label and quantity, not just counts.
+    assert "Carrots" in content
+    assert "500 g" in content
+    assert 'hx-trigger="load"' not in content
+
+
+def test_panel_fragment_endpoint_returns_partial(client, alice, make_recipe):
+    """/dashboard/panel/<name>/ returns just the panel fragment — it does not extend
+    base.html (12.13, an enhancement over already-rendered markup).
+    """
+    client.force_login(alice)
+
+    response = client.get(reverse("core:dashboard-panel", args=["sections"]))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "<html" not in content
+    assert "<nav" not in content
+    assert 'id="panel-sections"' in content
+    assert client.get(reverse("core:dashboard-panel", args=["nope"])).status_code == 404
+
+
+def test_flagship_panel_fragments_are_null_safe_when_empty(client, alice):
+    """`/dashboard/panel/this-week/` and `/shopping/` render their empty-state CTA rather than
+    a degenerate header-only shell when the user has no plan / no list (12.13 sub-note, N5 —
+    retired for these two by blocking finding #1).
+    """
+    client.force_login(alice)
+
+    this_week = client.get(reverse("core:dashboard-panel", args=["this-week"]))
+    shopping = client.get(reverse("core:dashboard-panel", args=["shopping"]))
+
+    assert this_week.status_code == 200
+    assert "No plan yet" in this_week.content.decode()
+    assert shopping.status_code == 200
+    assert "Nothing on the list" in shopping.content.decode()
+
+
+def test_reroll_suggestion_swaps_panel(client, alice, dish_with_component):
+    """The "what should I make?" re-roll names an explicit hx-target on the panel, not the
+    triggering button (D39 / task 06's item-10 bug was exactly this omission).
+    """
+    dish_with_component("A dish", owner=alice)
+    client.force_login(alice)
+
+    content = client.get(reverse("core:home")).content.decode()
+
+    panel_url = reverse("core:dashboard-panel", args=["suggestion"])
+    assert f'hx-get="{panel_url}"' in content
+    assert 'hx-target="#panel-suggestion"' in content
+
+
 def test_auth_screens_render_as_complete_documents(client, user_factory):
     """login.html, password_change.html and profile.html all extend base.html, but nothing
     proved any of them renders as a complete document via the plain test client the way

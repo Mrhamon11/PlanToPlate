@@ -1,0 +1,27 @@
+{% comment %}
+"What should I make?" dashboard panel (12.10). One randomly chosen visible dish (with at
+least one component — core.services.dashboard._suggestion), re-rollable.
+
+The re-roll control names an explicit hx-target on this panel (D39: an HTMX control that
+swaps something other than itself must name one), swapping the whole panel via
+core:dashboard-panel "suggestion". Without JavaScript the same button is a plain GET of the
+home page, which re-renders with a fresh random dish. No hx-trigger="load" — the dish below
+is already here on first load.
+
+Context: dashboard.suggestion — ObjectCard (name, url) or None.
+{% endcomment %}
+<section class="panel" id="panel-suggestion" aria-labelledby="panel-suggestion-head">
+    <div class="panel-head"><h2 id="panel-suggestion-head">What should I make?</h2></div>
+    {% if dashboard.suggestion %}
+        <p class="panel-suggestion-dish">
+            <a href="{{ dashboard.suggestion.url }}">{{ dashboard.suggestion.name }}</a>
+        </p>
+        <form method="get" action="{% url 'core:home' %}"
+              hx-get="{% url 'core:dashboard-panel' 'suggestion' %}"
+              hx-target="#panel-suggestion" hx-swap="outerHTML">
+            <button type="submit" class="btn btn-small" hx-disabled-elt="this">Show me another</button>
+        </form>
+    {% else %}
+        <p class="text-muted">No dishes to suggest yet.</p>
+    {% endif %}
+</section>

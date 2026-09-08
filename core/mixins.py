@@ -17,6 +17,7 @@ from django.http import HttpRequest
 from django.template.loader import render_to_string
 
 from core.permissions import IsOwnerOrReadOnly
+from core.services.recent import record_view
 
 # The HTML-side counterpart of core/serializers.py's OwnedSerializer read-only fields (see that
 # module's docstring). A ModelForm that exposes any of these gives its owner a write path
@@ -152,3 +153,36 @@ class OwnedObjectMixin:
                 "go through the /share/ view or API action instead."
             )
         return form_class
+
+
+class RecordsRecentView:
+    """Records a "recently viewed" row after a successful detail-page GET, for the home
+    dashboard's panel (``Plan/12-Home-Dashboard/design.md``, "Where recording happens").
+
+    Mix in ahead of the Django generic ``DetailView`` (after ``OwnedObjectMixin``), e.g.::
+
+        class RecipeDetailView(
+            LoginRequiredMixin, OwnedObjectMixin, RecordsRecentView, DetailView
+        ):
+            model = Recipe
+
+    **Detail pages only** — not list pages (scrolling past a card is not viewing it), not
+    forms, not print, not HTMX fragment endpoints. A fragment refresh (an ``hx-get`` that is
+    not a full-page ``hx-boost`` navigation) is not a fresh view and would bump ``viewed_at``
+    on every re-render, so it is skipped here.
+
+    The write goes through ``core.services.recent.record_view``, which swallows and logs any
+    failure — a locked database never turns a recipe page into a 500.
+    """
+
+    request: HttpRequest
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Any:
+        response = super().get(request, *args, **kwargs)
+        obj = getattr(self, "object", None)
+        is_fragment = getattr(request, "htmx", False) and not getattr(
+            request, "htmx_boosted", False
+        )
+        if obj is not None and request.user.is_authenticated and not is_fragment:
+            record_view(request.user, obj)
+        return response

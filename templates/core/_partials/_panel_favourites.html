@@ -1,0 +1,21 @@
+{% comment %}
+"Favourites" dashboard panel (12.8). Favourited recipes and dishes, already intersected with
+.visible_to(user) in core.services.dashboard._favourites — a favourite the user has since been
+un-shared from never reaches this template. Adds no logic. Returned alone by
+core:dashboard-panel "favourites".
+
+Context: dashboard.favourites — ObjectCard[] (kind, name, url).
+{% endcomment %}
+<section class="panel" id="panel-favourites" aria-labelledby="panel-favourites-head">
+    <div class="panel-head"><h2 id="panel-favourites-head">Favourites</h2></div>
+    <ul role="list" class="panel-cards">
+        {% for card in dashboard.favourites %}
+            <li>
+                <a href="{{ card.url }}">
+                    <span class="panel-card-kind">{{ card.kind }}</span>
+                    {{ card.name }}
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+</section>

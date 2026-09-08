@@ -29,7 +29,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from catalog.models import Ingredient, Tag, Unit
-from core.mixins import HtmxTemplateMixin, OwnedObjectMixin
+from core.mixins import HtmxTemplateMixin, OwnedObjectMixin, RecordsRecentView
 from core.services.copying import copy_object
 from core.services.graph import GraphError
 from core.services.sharing import SharingError, share, unshare
@@ -173,7 +173,7 @@ class RecipeListView(LoginRequiredMixin, OwnedObjectMixin, HtmxTemplateMixin, Li
         return context
 
 
-class RecipeDetailView(LoginRequiredMixin, OwnedObjectMixin, DetailView):
+class RecipeDetailView(LoginRequiredMixin, OwnedObjectMixin, RecordsRecentView, DetailView):
     """Ingredients, escaped instructions, the HTMX scale control, sub-recipe expanders, the
     "I made this" / rating / favourite widgets, and the task 03 share / copy controls.
     """

@@ -31,7 +31,7 @@
 | Test | Asserts |
 |---|---|
 | `test_this_week_shows_active_plan` | Today first and flagged. |
-| `test_this_week_ignores_ended_plan` | A plan that ended yesterday yields the empty state, not the most recent plan. |
+| `test_this_week_ignores_ended_plan` | A plan that ended yesterday yields the empty-state CTA (`EmptyPanel` with a `planner:plan-generate` forward URL), not the most recent plan. |
 | `test_shopping_panel_uses_default_list` | Not some other list of the user's. |
 | `test_shopping_panel_progress_counts` | checked / total. |
 | `test_favourites_exclude_unshared_object` | A favourited-then-unshared recipe is gone. |
@@ -40,7 +40,9 @@
 | `test_suggestion_excludes_empty_dishes` | Matches the planner's rule (task 06 `design.md`). |
 | `test_suggestion_only_from_visible_dishes` | |
 | `test_section_counts_are_visibility_scoped` | Bob's recipe count is Bob's, not the table's. |
-| `test_empty_panels_are_absent` | A brand-new user's context carries no empty panels to render. |
+| `test_empty_panels_are_absent` | A brand-new user's context carries no empty *secondary* panels; the two flagship panels carry an `EmptyPanel` CTA (blocking finding #1). |
+| `test_favourites_do_not_starve_dishes` | 8+ favourite recipes do not crowd favourite dishes out of the panel (N2). |
+| `test_flagship_ctas_for_user_with_content_but_no_plan_or_list` | Owns recipes/dishes but has not planned or listed: `show_get_started` is false and both flagship CTAs resolve (blocking finding #1). |
 | `test_dashboard_query_count` | A user with data in **every** panel stays within a bounded query count. The most-requested page in the app. |
 
 ## UI — `core/tests/test_templates.py`
@@ -48,9 +50,10 @@
 | Test | Asserts |
 |---|---|
 | `test_home_dashboard_cards` | *(existing — updated, not deleted)* The five section links are still present, now with counts, and no "Coming soon." remains. |
-| `test_new_user_home_is_not_blank` | Section links plus a "get started" line; no empty panel boxes. |
-| `test_panels_render_without_htmx` | The plain test client gets every panel's content in the first response — no `hx-trigger="load"`, per the task 02 no-JS rule. |
+| `test_new_user_home_is_not_blank` | Section links plus a "get started" line; the two flagship panels render their CTA; no *secondary* empty panel boxes. |
+| `test_panels_render_without_htmx` | The plain test client gets every panel's content in the first response — including a real shopping item's resolved label + quantity — no `hx-trigger="load"`, per the task 02 no-JS rule. |
 | `test_panel_fragment_endpoint_returns_partial` | And does not extend `base.html`. |
+| `test_flagship_panel_fragments_are_null_safe_when_empty` | `/dashboard/panel/this-week/` and `/shopping/` render their CTA, not a header-only shell, for a user with no data (N5, retired for these two). |
 | `test_reroll_suggestion_swaps_panel` | HTMX re-roll targets the panel, not the triggering element. *(Task 06's item-10 bug, which was exactly this omission.)* |
 
 ## API — `core/tests/test_dashboard_api.py`
@@ -58,7 +61,8 @@
 | Test | Asserts |
 |---|---|
 | `test_dashboard_endpoint_requires_auth` | |
-| `test_dashboard_endpoint_matches_service` | Same panel content as the HTML page — one implementation, two renderings. |
+| `test_dashboard_endpoint_matches_service` | Same panel content as the HTML page — one implementation, two renderings. Includes an ingredient-backed shopping line's `label` / `quantity` / `unit` in `shopping.groups[].items[]`. |
+| `test_dashboard_flagship_panels_carry_forward_url_when_empty` | `this_week` / `shopping` serialise a `forward_url`, never `null`, when empty (blocking finding #1). |
 | `test_dashboard_endpoint_is_read_only` | `POST` / `PUT` / `DELETE` → 405. |
 | `test_dashboard_never_exposes_another_users_history` | |
 
@@ -73,15 +77,19 @@
 
 ## Definition of Done
 
-- [ ] Every test above exists and passes.
-- [ ] `ruff` clean; suite green; no pending migrations.
-- [ ] Every panel query goes through `.visible_to(user)` — no hand-rolled ownership filters.
-- [ ] Recently-viewed re-filters at render time; a revoked object cannot be rendered from a
+- [x] Every test above exists and passes.
+- [x] `ruff` clean; suite green; no pending migrations.
+- [x] Every panel query goes through `.visible_to(user)` — no hand-rolled ownership filters.
+- [x] Recently-viewed re-filters at render time; a revoked object cannot be rendered from a
       stored row.
-- [ ] `RecentView` rows are never readable by any user but their own.
-- [ ] The dashboard has a bounded query count.
-- [ ] The whole page works with JavaScript disabled.
-- [ ] `N4.14` struck through in `Plan/N4-PWA-And-Polish/tasks.md` as delivered here.
-- [ ] The 12.9 share-ordering decision recorded in `ARCHITECTURE.md`.
-- [ ] All four manual verifications performed and reported.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated.
+- [x] `RecentView` rows are never readable by any user but their own.
+- [x] The dashboard has a bounded query count.
+- [x] The whole page works with JavaScript disabled.
+- [x] `N4.14` struck through in `Plan/N4-PWA-And-Polish/tasks.md` as delivered here.
+- [x] The 12.9 share-ordering decision recorded in `ARCHITECTURE.md` (D51).
+- [ ] All four manual verifications performed and reported. *(dev run: automated coverage in
+      place — `test_panels_render_without_htmx`, `test_recent_excludes_now_invisible_object`,
+      `test_favourites_exclude_unshared_object`, `test_new_user_home_is_not_blank`; the human
+      walkthrough on fedora-headless is part of handoff.)*
+- [x] Subtasks ticked; `../MILESTONES.md` updated. *(all subtasks ticked; MILESTONES row
+      rewritten and status set COMPLETE on owner approval, 2026-09-08.)*

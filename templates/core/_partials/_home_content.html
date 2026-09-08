@@ -1,34 +1,35 @@
 {% comment %}
-The home dashboard's inner content — included by the full-page template and returned
-directly for an HTMX request to the same view (core.views.HomeView). Never extends base.html:
-this is a fragment.
+The home dashboard's inner content (task 12) — included by core/home.html for a full page and
+returned directly by core.views.HomeView for an HTMX request to the same view. Never extends
+base.html: this is a fragment.
 
-The section links use literal paths, matching templates/_partials/_nav.html — recipes /
-dishes / books / lists / planner all have routes (tasks 04-08). A richer dashboard (recently
-viewed, this week's plan, active list) is task 12.
+Every panel is already rendered here, server-side, on the first request — there is no
+hx-trigger="load" anywhere, so the page is complete with JavaScript disabled (design.md,
+"Rendering, and the no-JS rule"). The five secondary panels are simply not included when they
+have nothing to say; "This week" and "Shopping" always render (as a one-line CTA when empty),
+and the "Browse" section links are the floor the page always degrades to.
+
+Context: dashboard (core.services.dashboard.DashboardContext), user.
 {% endcomment %}
 <h1>Welcome back, {{ user.username }}</h1>
-<p class="text-muted">Jump into PlanToPlate.</p>
 
-<div class="card-grid">
-    <a class="card card-link" href="/recipes/">
-        <h2>Recipes</h2>
-        <p class="text-muted">Browse, add, and scale the recipes you can see.</p>
-    </a>
-    <a class="card card-link" href="/dishes/">
-        <h2>Dishes</h2>
-        <p class="text-muted">Combine recipes into a single meal and its shopping list.</p>
-    </a>
-    <a class="card card-link" href="/books/">
-        <h2>Books</h2>
-        <p class="text-muted">Organise recipes into collections, your way.</p>
-    </a>
-    <a class="card card-link" href="/lists/">
-        <h2>Lists</h2>
-        <p class="text-muted">Shopping lists, menus, and anything else worth keeping in order.</p>
-    </a>
-    <a class="card card-link" href="/planner/">
-        <h2>Planner</h2>
-        <p class="text-muted">Generate a week of meals under your rules, then the shopping list.</p>
-    </a>
+{% if dashboard.show_get_started %}
+    <p class="dashboard-intro">
+        Nothing here yet —
+        <a href="{% url 'recipes:recipe-create' %}">add your first recipe</a>
+        to get started.
+    </p>
+{% else %}
+    <p class="text-muted">What you're cooking, and what you need to buy.</p>
+{% endif %}
+
+<div class="dashboard">
+    {% include "core/_partials/_panel_this_week.html" %}
+    {% include "core/_partials/_panel_shopping.html" %}
+    {% if dashboard.recently_viewed %}{% include "core/_partials/_panel_recent.html" %}{% endif %}
+    {% if dashboard.favourites %}{% include "core/_partials/_panel_favourites.html" %}{% endif %}
+    {% if dashboard.shared_with_you %}{% include "core/_partials/_panel_shared.html" %}{% endif %}
+    {% if dashboard.public_from_others %}{% include "core/_partials/_panel_public.html" %}{% endif %}
+    {% if dashboard.suggestion %}{% include "core/_partials/_panel_suggestion.html" %}{% endif %}
+    {% include "core/_partials/_panel_sections.html" %}
 </div>

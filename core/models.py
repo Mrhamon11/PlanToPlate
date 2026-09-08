@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
@@ -120,6 +122,54 @@ class OwnedModel(models.Model):
         The default does nothing — most owned models are leaves.
         """
         return None
+
+
+class RecentView(models.Model):
+    """One row per ``(user, object)`` recording that ``user`` last opened that object's detail
+    page — the home dashboard's "Recently viewed" panel (``Plan/12-Home-Dashboard/design.md``,
+    "Recently viewed"; absorbs ``N4.14``).
+
+    **Deliberately not an ``OwnedModel``.** This is private telemetry *about* a user, not an
+    object a user owns, shares or copies, so it has no visibility of its own. It is only ever
+    read as ``RecentView.objects.filter(user=<the requester>)`` — never scoped by object
+    ownership — and each referenced object is then re-resolved through *its* own
+    ``.visible_to(user)`` at render time, because a row records only that the user *once* could
+    see the object; whether they still can is a separate question whose answer can change
+    (``design.md``, "Security notes"). As a plain ``models.Model`` it is invisible to
+    ``core/tests/test_conventions.py``'s hooks guard, which inspects only ``OwnedModel``
+    subclasses — nothing to declare (``core/README.md``, "Does this model contain other owned
+    objects?").
+
+    **One row per user per object, bumped in place** (``update_or_create`` on the unique
+    triple, never an append-only event log): recording a view is a write on a page-*read* path
+    and SQLite serialises writers, so the table must stay at O(users x objects opened), capped
+    further by ``core.services.recent.RECENT_VIEW_LIMIT``.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="recent_views",
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+    viewed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-viewed_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "content_type", "object_id"],
+                name="core_recentview_unique_user_object",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user", "-viewed_at"], name="core_recentview_user_recent"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} viewed {self.content_type_id}#{self.object_id}"
 
 
 class UserObjectStats(models.Model):
