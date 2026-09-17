@@ -112,15 +112,45 @@
 4. Attempt to demote the only admin and confirm it is refused.
 5. Preview deleting a user with content and confirm the counts are accurate.
 
+**Performed and reported (2026-09-17), on `fedora-headless`'s file-backed dev-test DB** — the
+click-through was `Plan/09-Admin-Control-Center/dev-test-walkthrough.md` (owner-run, kept in
+the repo for reuse rather than deleted; this note is the durable record for the DoD):
+
+1. **Create-user temp-password login** — verified (walkthrough Scenario 3): password shown
+   once, absent on reload and in every admin view; `testuser1`/`testuser2` created and logged
+   in with the temp value, forced into the change screen.
+2. **Reset-password session kill** — verified (Scenario 4): the logged-in second session was
+   dead immediately after the reset action.
+3. **Bulk JSON import round-trip** — verified (Scenario 10 steps 1–6, hand-run): dry-run
+   preview, real import, re-import skip-existing (no duplicates), update-existing. Steps 7–10
+   (owner-forgery, path-qualified error cases) and Scenario 11 (management command) were
+   verified by the automated suite instead of by hand, per the walkthrough's own note, since
+   they're exhaustively covered by `core/tests/test_import_execution.py` /
+   `test_import_validation.py`.
+4. **Last-admin demotion refusal** — verified (Scenario 7): all four routes (bulk action,
+   change-form `is_staff` untick, change-form `is_active` untick, delete) refused on the sole
+   remaining admin.
+5. **Delete-user preview counts** — verified (Scenario 6), and this pass **found and fixed a
+   real bug**: the D53 PROTECT-clearing pre-pass (self-owned + cross-owner `DishComponent`/
+   `RecipeComponent` neutralization) initially threw `IntegrityError` on the dev-test box
+   because its two new migrations (`meals.0002`, `recipes.0004`) hadn't been applied there yet
+   — a schema gap, not a logic bug. Applied (with a `db.sqlite3` backup taken first), re-verified:
+   delete-user now succeeds against a real self-owned-component account without the "protected"
+   refusal. A related unshare report during the same session turned out to be unrelated —
+   reproduced end to end against the test DB and confirmed `RecipeUnshareView` works correctly.
+6. **Dashboard DB/WAL size panel** (added as a sixth check, `tasks.md` 09.14 sub-note) —
+   verified (Scenario 2) against the real file-backed database; both panels render actual
+   non-zero sizes.
+
 ## Definition of Done
 
-- [ ] Every test above exists and passes.
-- [ ] `ruff` clean; suite green; no pending migrations.
-- [ ] Every model is registered and browsable without N+1.
-- [ ] Temp passwords are shown once, never stored, never logged.
-- [ ] The last admin cannot be locked out by any route.
-- [ ] Import is atomic, path-qualified in its errors, and cannot set `owner`.
-- [ ] No arbitrary SQL execution exists anywhere in the admin.
-- [ ] All five manual verifications performed and reported.
-- [ ] The ingredient-promotion open question in `MILESTONES.md` §8 is resolved and recorded.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated.
+- [x] Every test above exists and passes.
+- [x] `ruff` clean; suite green; no pending migrations.
+- [x] Every model is registered and browsable without N+1.
+- [x] Temp passwords are shown once, never stored, never logged.
+- [x] The last admin cannot be locked out by any route.
+- [x] Import is atomic, path-qualified in its errors, and cannot set `owner`.
+- [x] No arbitrary SQL execution exists anywhere in the admin.
+- [x] All five manual verifications performed and reported.
+- [x] The ingredient-promotion open question in `MILESTONES.md` §8 is resolved and recorded.
+- [x] Subtasks ticked; `../MILESTONES.md` updated.

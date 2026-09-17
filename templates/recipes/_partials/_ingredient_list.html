@@ -13,6 +13,9 @@ Context:
   factor                  — the Decimal currently applied (1 = unscaled)
   visible_sub_recipe_ids  — pks of sub-recipes the viewer may open; anything else degrades to
                             a bare name (design.md, "Edge cases").
+
+A component with neither `ingredient_id` nor `sub_recipe_id` is tombstoned (D53 — its
+ingredient/sub-recipe belonged to a since-deleted account) and renders as "(removed)".
 {% endcomment %}
 <ul class="component-list" role="list">
     {% for component in components %}
@@ -35,6 +38,8 @@ Context:
                 {% else %}
                     <span class="component-name">{{ component.sub_recipe.name }}</span>
                 {% endif %}
+            {% else %}
+                <span class="component-name text-muted">(removed)</span>
             {% endif %}
             {% if component.note %}<span class="component-note text-muted">— {{ component.note }}</span>{% endif %}
             {% if component.pk and component.sub_recipe_id %}

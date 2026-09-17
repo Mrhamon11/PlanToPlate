@@ -56,7 +56,7 @@ class Dish(OwnedModel):
         return reverse("meals:dish-detail", args=[self.pk])
 
     def _component_recipes(self) -> list[Recipe]:
-        return [component.recipe for component in self.components.all()]
+        return [component.recipe for component in self.components.all() if component.recipe_id]
 
     def share_dependencies(self) -> list[OwnedModel]:
         """The component recipes — sharing a dish grants read on them, which transitively pulls
@@ -69,9 +69,12 @@ class Dish(OwnedModel):
 
         Routed through ``recipes.models._copy_or_reference`` so a recipe the actor has already
         copied — in an earlier operation, or earlier in this one (a dish and a book that share
-        a recipe) — is reused rather than copied again (D37).
+        a recipe) — is reused rather than copied again (D37). A tombstoned component (D53, its
+        recipe already gone) is skipped — there is nothing left to copy.
         """
         for component in self.components.all():
+            if not component.recipe_id:
+                continue
             DishComponent.objects.create(
                 dish=new_obj,
                 recipe=_copy_or_reference(component.recipe, copier),
@@ -121,11 +124,24 @@ class DishComponent(models.Model):
 
     ``PROTECT`` on ``recipe`` (unlike ``RecipeBookEntry``'s ``CASCADE``): a recipe used in a
     dish cannot be deleted out from under it — the delete is a 409 naming the dishes
-    (``design.md``, "Edge cases").
+    (``design.md``, "Edge cases") — for an ordinary single-recipe delete.
+
+    ``recipe`` is nullable for one reason only: ``accounts.services.delete_user``'s
+    PROTECT-clearing pre-pass (D53) nulls it on a *bystander's* component whose recipe belonged
+    to the account being deleted, rather than deleting the ``DishComponent`` row outright — the
+    line survives (``servings``/``position`` intact) as a visible trace instead of silently
+    disappearing. Every read path that walks a dish's components must tolerate ``recipe`` being
+    ``None`` (``meals/services/dishes.py``, ``meals/serializers.py``).
     """
 
     dish = models.ForeignKey(Dish, on_delete=models.CASCADE, related_name="components")
-    recipe = models.ForeignKey(Recipe, on_delete=models.PROTECT, related_name="dish_components")
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="dish_components",
+    )
     servings = models.DecimalField(
         max_digits=6,
         decimal_places=2,
@@ -144,7 +160,7 @@ class DishComponent(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.servings}× {self.recipe} in {self.dish}"
+        return f"{self.servings}× {self.recipe or '(removed)'} in {self.dish}"
 
 
 class DishStats(UserObjectStats):

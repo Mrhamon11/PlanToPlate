@@ -1,8 +1,8 @@
 # 12 — Home Dashboard · Manual dev-test walkthrough
 
-> Scratch file for the human dev-test pass. **Delete before merging `task/12-home-dashboard`.**
-> Not part of the Definition of Done — the automated `test-plan.md` is. This is the
-> click-through that confirms the dashboard feels right in a browser.
+> Scratch file for the human dev-test pass. Not part of the Definition of Done — the
+> automated `test-plan.md` is. This is the click-through that confirms the dashboard feels
+> right in a browser.
 
 Runs against the **task-08 dev-test dataset** already seeded on `fedora-headless`
 (2026-09-06): `hamon` has ~41 recipes, 20 dishes, 5 dish favourites, ratings, a default

@@ -3,6 +3,63 @@
 Items raised by a pipeline stage that are real but not blocking and not owned by any
 planned task. Each line: what, where it came from, why it is not urgent.
 
+## Admin control center — follow-ups
+
+- **`dashboard_context` fires one `COUNT(*)` per registered model on every `/admin/` load.**
+  (Task 09 review, 2026-09-08.) `config/admin.py:135–142` — ~25 count queries plus the
+  signups/activity queries each time the admin index renders. Harmless at this scale and it is
+  an admin-only page, but it is the pattern 09.2 otherwise polices with `list_select_related`.
+  Fix if the admin index ever feels slow: cache the counts, or drop the per-model breakdown.
+
+- **`_check_in_file_cycles.walk` is unbounded recursion.** (Task 09 review, 2026-09-08.)
+  `core/services/importer.py` (~L363). A pathological in-file recipe chain (~500 recipes each
+  referencing the next, which fits under the 1000-object cap) recurses ~500 frames deep and
+  could approach Python's default recursion limit inside the request stack. Suspicion, not a
+  demonstrated failure — the 5 MB / 1000-object caps make it hard to hit. If this walker is
+  touched later, convert it to an explicit stack.
+
+- **`accounts/admin.py` `delete_model` can still raise `ProtectedError`.** (Task 09 dev
+  rework, 2026-09-08.) The `delete_view` POST branch now refuses a user-delete when a
+  bystander's object PROTECTs a cascaded child, but the `delete_model` hook still routes
+  straight through `services.delete_user` with no such guard. Unreachable from the admin UI
+  today (`get_actions` drops `delete_selected`, `delete_view` is overridden), so not a
+  user-facing 500. If a new call path to `delete_model` appears, give it the same `protected`
+  guard or catch `ProtectedError` in `services.delete_user`.
+
+- **`yield_unit` change on a recipe used as a sub-recipe is not guarded against existing
+  parent components.** (Task 09 review, 2026-09-08.) `RecipeComponentInlineFormSet.clean` in
+  `recipes/admin.py` only checks the recipe's own components, not `used_in`. An admin (or the
+  REST/HTML `Recipe` update path — almost certainly the same gap) changing `Recipe.yield_unit`
+  to a dimension incompatible with a parent component's `unit` leaves that parent
+  unflattenable, surfacing later in the flattener. Cross-cutting "yield_unit change vs
+  existing parent components" gap; not introduced by task 09. Fix by re-running the
+  sub-recipe unit-scalability check over `used_in` on any `yield_unit` change, wherever that
+  change is accepted.
+
+- **`manage.py import_json` lacks the admin view's broad `except`.** (Task 09 review,
+  2026-09-08.) `core/management/commands/import_json.py` catches only `ImportValidationError`;
+  `import_json_view` catches `Exception` from `execute` and renders it as a problem-list
+  entry. An unanticipated `IntegrityError` / `DataError` in the CLI path reaches the operator
+  as a raw traceback rather than a clean `CommandError`. The `core/schemas.py` magnitude cap
+  closed the known trigger; acceptable for a shell tool. Wrap `run_import` in a broad
+  `except` that re-raises as `CommandError` if this command is touched again.
+
+- **`GuardedUserChangeForm` leaves `is_superuser` editable by any staff user with User-change
+  permission.** (Task 09 review, 2026-09-08.) `accounts/admin.py` — the re-declared `fieldsets`
+  keep `is_superuser` on the change form, so a non-superuser staffer holding
+  `auth.change_user` could self-promote. This is Django's stock `UserAdmin` weakness, not
+  introduced by task 09, and it is harmless while every staff account is fully trusted. Revisit
+  if a non-superuser staff tier is ever introduced: drop `is_superuser`/`user_permissions`
+  from the form for non-superuser requests.
+
+  *Same trigger, fold in when this is revisited (Task 09 review, 2026-09-08):* `accounts/admin.py`
+  `delete_view` unpacks `get_deleted_objects`' third return value (`perms_needed`) to `_` and
+  ignores it. A staff user holding `auth.delete_user` but lacking model-level delete permission
+  on a cascaded model (e.g. `recipes.delete_recipe`) can still cascade-delete those rows through
+  user deletion — stock Django would block on `perms_needed`. Harmless while every admin is a
+  superuser (`bootstrap_admin` grants superuser). Honour `perms_needed` in `delete_view` at the
+  same time the non-superuser staff tier lands.
+
 ## Meal planner — follow-ups
 
 - **A saved plan cannot show *why* a slot is unfilled.** (Task 08.12 dev run, 2026-09-06.)
@@ -230,6 +287,14 @@ planned task. Each line: what, where it came from, why it is not urgent.
   task touched. Fix is one commit: `uv run ruff format planner/serializers.py
   planner/tests/test_views.py`. Harmless, but it makes every future planner task's format
   step noisy — whoever picks up task 14 (planner) can fold it in.
+
+- **`recipes/serializers.py` keeps its own `_assert_sub_recipe_unit_scalable`.** (Task 09
+  rework, 2026-09-08.) The sub-recipe unit-scalability rule now has one shared implementation,
+  `recipes.services.components.assert_sub_recipe_unit_scalable`, used by the HTML form path,
+  the importer, and the admin forms. The DRF serializer still carries a private static-method
+  copy (pre-existing, reviewer-accepted). Point it at the shared helper on the next serializer
+  touch — a standalone refactor of working reviewed code needs sign-off and was out of scope
+  for the 09 rework.
 
 ## Operations / dev workflow
 

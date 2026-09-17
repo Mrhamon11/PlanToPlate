@@ -161,6 +161,11 @@ class Recipe(OwnedModel):
         shopping-list aggregation, which groups by ``ingredient.pk`` (task 05 review finding 1).
         """
         for component in self.components.all():
+            if not component.ingredient_id and not component.sub_recipe_id:
+                # A tombstoned row (D53) — its ingredient/sub-recipe is already gone, so there
+                # is nothing to copy; the copy simply omits it rather than carrying over an
+                # empty line.
+                continue
             new_ingredient = (
                 _copy_or_reference(component.ingredient, copier)
                 if component.ingredient_id
@@ -183,12 +188,23 @@ class Recipe(OwnedModel):
 
 
 class RecipeComponent(models.Model):
-    """One line of a recipe: an ingredient *or* a sub-recipe (never both, never neither —
-    enforced by a database ``CheckConstraint``), with a quantity and unit.
+    """One line of a recipe: an ingredient *or* a sub-recipe, with a quantity and unit.
+
+    Ordinarily **exactly one** of ``ingredient`` / ``sub_recipe`` is set — never both, and
+    never neither — enforced by the ``CheckConstraint`` below. The one exception is a
+    *tombstoned* row: ``accounts.services.delete_user``'s PROTECT-clearing pre-pass (D53) nulls
+    both fields on a bystander's component whose ingredient or sub-recipe belonged to the
+    account being deleted, rather than deleting the row outright, so the line survives (with
+    its ``quantity``/``note``/``position`` intact) as a visible trace instead of silently
+    disappearing. The constraint therefore only forbids **both being set at once** — "at most
+    one", not "exactly one" — and every read path that flattens or displays a component must
+    tolerate both being ``None`` (``recipes/services/flatten.py`` and the templates that render
+    a component's name).
 
     ``PROTECT`` on both foreign keys: deleting an ingredient or a recipe that something else
     depends on must fail loudly with a 409 naming the dependents, not silently gut a recipe
-    (design.md, "Components").
+    (design.md, "Components") — for an ordinary single-object delete. Whole-account deletion
+    goes through the D53 pre-pass instead (see ``accounts.services.delete_user``).
     """
 
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="components")
@@ -215,15 +231,14 @@ class RecipeComponent(models.Model):
         ordering = ["position"]
         constraints = [
             models.CheckConstraint(
-                condition=(models.Q(ingredient__isnull=False) & models.Q(sub_recipe__isnull=True))
-                | (models.Q(ingredient__isnull=True) & models.Q(sub_recipe__isnull=False)),
+                condition=models.Q(ingredient__isnull=True) | models.Q(sub_recipe__isnull=True),
                 name="recipes_component_ingredient_xor_subrecipe",
             )
         ]
 
     def __str__(self) -> str:
         target = self.ingredient or self.sub_recipe
-        return f"{self.quantity} {self.unit} {target}"
+        return f"{self.quantity} {self.unit} {target or '(removed)'}"
 
 
 class RecipeStats(UserObjectStats):

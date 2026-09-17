@@ -63,21 +63,27 @@ def roles_for(recipes: list[Recipe]) -> set[str]:
 
 
 def total_minutes(dish: Dish) -> int:
-    return total_minutes_for([component.recipe for component in dish.components.all()])
+    return total_minutes_for(
+        [component.recipe for component in dish.components.all() if component.recipe_id]
+    )
 
 
 def roles(dish: Dish) -> set[str]:
-    return roles_for([component.recipe for component in dish.components.all()])
+    return roles_for(
+        [component.recipe for component in dish.components.all() if component.recipe_id]
+    )
 
 
 def visible_components(dish: Dish, viewer: object | None) -> list[DishComponent]:
     """``dish``'s components whose recipe is ``visible_to(viewer)``, in position order.
 
-    ``viewer=None`` skips the filter for trusted internal callers. Any real request must pass
-    its user so a component recipe that is no longer visible to that reader (D31) is dropped
-    rather than leaked through the dish.
+    A tombstoned component (D53 — ``recipe`` nulled by ``delete_user``'s PROTECT-clearing
+    pre-pass) is dropped unconditionally, for every caller: there is nothing left to scale or
+    flatten. ``viewer=None`` then skips the visibility filter for trusted internal callers. Any
+    real request must pass its user so a component recipe that is no longer visible to that
+    reader (D31) is dropped rather than leaked through the dish.
     """
-    components = list(dish.components.all())
+    components = [c for c in dish.components.all() if c.recipe_id]
     if viewer is None:
         return components
     visible_ids = set(
@@ -139,6 +145,35 @@ def parse_dish_component_drafts(post: object, *, user: object) -> list[DishCompo
             raise ValidationError("Servings must be greater than zero.")
         drafts.append(DishComponentDraft(recipe=visible[int(ref)], servings=servings))
     return drafts
+
+
+def neutralize_protect_blockers_for_owner_deletion(owner) -> None:
+    """Clear every ``DishComponent.recipe`` ``PROTECT`` blocker that
+    ``accounts.services.delete_user`` would otherwise hit deleting ``owner`` (``ARCHITECTURE.md``
+    D53) — called from that service's pre-pass, before ``owner.delete()`` runs.
+
+    A ``DishComponent`` only blocks the cascade when its ``recipe`` belongs to ``owner`` — that
+    is what is about to be deleted. Two shapes:
+
+    - **Self-owned**: the component's own ``dish`` also belongs to ``owner``, so the component
+      row is cascading away in the very same ``owner.delete()`` (its ``dish`` FK is
+      ``CASCADE``). Django's collector does not know that yet when it checks ``PROTECT``, so
+      these rows are deleted outright here, ahead of the cascade — nothing is lost that was not
+      already going away.
+    - **Cross-owner (bystander)**: the component's ``dish`` belongs to someone else, who is not
+      being deleted and whose dish must survive. ``recipe`` is set to ``None`` instead — the
+      same graceful-degradation pattern ``ListItem.recipe``/``dish``/``ingredient`` already use
+      for a recipe gone private (D31). Every read path here (``total_minutes``, ``roles``,
+      ``visible_components``/``flatten_dish``) and ``meals.serializers.DishSerializer`` already
+      tolerates a component whose ``recipe`` is ``None``.
+
+    The self-owned delete must run first: once those rows are gone, a plain
+    ``filter(recipe__owner=owner)`` update only ever matches the remaining cross-owner rows.
+    """
+    from meals.models import DishComponent
+
+    DishComponent.objects.filter(recipe__owner=owner, dish__owner=owner).delete()
+    DishComponent.objects.filter(recipe__owner=owner).update(recipe=None)
 
 
 def replace_dish_components(dish: Dish, drafts: list[DishComponentDraft]) -> None:

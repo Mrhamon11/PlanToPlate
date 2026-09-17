@@ -49,7 +49,15 @@ def test_negative_yield_rejected(alice, cup):
         )
 
 
-def test_component_requires_exactly_one_target(make_recipe, make_ingredient, gram):
+def test_component_requires_at_most_one_target(make_recipe, make_ingredient, gram):
+    """Both ``ingredient`` and ``sub_recipe`` set at once is still rejected at the database
+    level. Neither set is *not* — D53 relaxed "exactly one" to "at most one" so
+    ``accounts.services.delete_user``'s PROTECT-clearing pre-pass can tombstone a bystander's
+    component (both fields nulled) instead of hard-refusing the whole-account delete. Every
+    application write path (the serializer, the HTML form, the importer) still only ever
+    produces an exactly-one row — this relaxation is a database-level allowance for that one
+    internal caller, not a new option offered to users.
+    """
     recipe = make_recipe()
     sub = make_recipe(name="Sub")
     ingredient = make_ingredient()
@@ -63,8 +71,9 @@ def test_component_requires_exactly_one_target(make_recipe, make_ingredient, gra
             unit=gram,
         )
 
-    with pytest.raises(IntegrityError), transaction.atomic():
-        RecipeComponent.objects.create(recipe=recipe, quantity=Decimal("1"), unit=gram)
+    tombstoned = RecipeComponent.objects.create(recipe=recipe, quantity=Decimal("1"), unit=gram)
+    assert tombstoned.ingredient_id is None
+    assert tombstoned.sub_recipe_id is None
 
 
 def test_components_ordered_by_position(make_recipe, make_ingredient, gram, add_ingredient):

@@ -1,0 +1,77 @@
+{% extends "admin/index.html" %}
+
+{% comment %}
+Task 09.12 — the operational dashboard. Rendered above the stock app list. All values come
+from ``PlanToPlateAdminSite.dashboard_context`` ({{ dashboard }}); this template only lays
+them out.
+{% endcomment %}
+
+{% block content %}
+<div class="module" id="ptp-dashboard">
+  <h2>Control center</h2>
+
+  <p>
+    <strong>{{ dashboard.user_count }}</strong> user{{ dashboard.user_count|pluralize }}
+    ({{ dashboard.active_user_count }} active, {{ dashboard.staff_count }} admin).
+  </p>
+
+  <h3>Database</h3>
+  {% if dashboard.database %}
+    <p>
+      Database file: <strong>{{ dashboard.database.database_human }}</strong>
+      &nbsp;·&nbsp; WAL file: <strong>{{ dashboard.database.wal_human }}</strong>
+      <br><small>{{ dashboard.database.path }}</small>
+    </p>
+  {% else %}
+    <p><small>File size is reported for a file-backed SQLite database only.</small></p>
+  {% endif %}
+
+  <h3>Object counts</h3>
+  <table>
+    <thead><tr><th>Model</th><th>App</th><th>Rows</th></tr></thead>
+    <tbody>
+      {% for row in dashboard.model_counts %}
+        <tr><td>{{ row.label }}</td><td>{{ row.app }}</td><td>{{ row.count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Recent signups</h3>
+  {% if dashboard.recent_signups %}
+    <ul>
+      {% for user in dashboard.recent_signups %}
+        <li>{{ user.get_username }} &mdash; {{ user.date_joined }}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p><small>No users yet.</small></p>
+  {% endif %}
+
+  <h3>Recent admin activity</h3>
+  {% if dashboard.recent_activity %}
+    <ul>
+      {% for entry in dashboard.recent_activity %}
+        <li>
+          {{ entry.action_time }} &mdash;
+          {% if entry.is_deletion %}
+            Deleted "{{ entry.object_repr }}".
+          {% else %}
+            {{ entry.get_change_message }} ({{ entry.object_repr }})
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p><small>No recorded activity yet.</small></p>
+  {% endif %}
+
+  <h3>Quick actions</h3>
+  <ul>
+    {% for link in dashboard.quick_links %}
+      <li><a href="{{ link.url }}">{{ link.label }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+
+{{ block.super }}
+{% endblock %}

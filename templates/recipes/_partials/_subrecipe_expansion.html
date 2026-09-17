@@ -16,6 +16,8 @@ the fragment then shows only its name, never its contents — degrade, don't 500
                     <span class="component-name">{{ component.ingredient.name }}</span>
                 {% elif component.sub_recipe_id %}
                     <span class="component-name">{{ component.sub_recipe.name }}</span>
+                {% else %}
+                    <span class="component-name text-muted">(removed)</span>
                 {% endif %}
                 {% if component.note %}<span class="component-note text-muted">— {{ component.note }}</span>{% endif %}
             </li>

@@ -270,8 +270,15 @@ def _blank_component_row(kind: str = "ingredient") -> dict[str, Any]:
 
 
 def _saved_component_rows(recipe: Recipe) -> list[dict[str, Any]]:
+    """The recipe edit form's pre-filled rows. A tombstoned component (D53 — its ingredient or
+    sub-recipe was nulled by another account's deletion) is dropped rather than shown: there is
+    nothing left to edit, and re-saving the form already fully replaces the component set,
+    which is how the orphaned row is finally cleaned up.
+    """
     rows: list[dict[str, Any]] = []
     for component in recipe.components.all():
+        if not component.ingredient_id and not component.sub_recipe_id:
+            continue
         is_sub = bool(component.sub_recipe_id)
         target = component.sub_recipe if is_sub else component.ingredient
         rows.append(

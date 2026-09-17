@@ -171,6 +171,12 @@ def _flatten_into(
             )
             continue
 
+        if not component.sub_recipe_id:
+            # A tombstoned component (D53) — its ingredient or sub-recipe belonged to a since-
+            # deleted account and the reference was nulled rather than the row dropped. Nothing
+            # to contribute; skip it rather than crash on a None sub-recipe below.
+            continue
+
         sub_recipe = component.sub_recipe
         if sub_recipe.pk in id_path:
             raise CycleError([*name_path, sub_recipe.name])

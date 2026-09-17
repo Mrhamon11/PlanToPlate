@@ -89,6 +89,20 @@ shopping list can carry two content FKs (`ingredient` + `dish`); the `lists/sign
 delete-user flow must handle this — a two-FK branch in the receivers, or stamping the tombstone
 text before the cascade runs.
 
+**A second, related pre-pass (`ARCHITECTURE.md` D53).** `DishComponent.recipe` and
+`RecipeComponent.ingredient` / `sub_recipe` are `on_delete=PROTECT` (deliberately — a live
+recipe/ingredient can't be deleted out from under a dish/recipe that uses it). Left alone, this
+blocks deleting almost any real user: it trips on the ordinary case of a user's own recipe used
+in their own dish, and — since components are scoped to *visible*, not *owned* — on a
+bystander's dish/recipe using something the departing user shared. Before the main cascade
+runs, `delete_user` must clear both shapes: delete self-owned protecting rows outright (both
+sides owned by the user being deleted — nothing is lost that wasn't already going away), and
+neutralize cross-owner rows via the same `SET_NULL` + graceful-degradation pattern
+`ListItem.recipe`/`dish`/`ingredient` and `DishSerializer._visible_components` already use when
+a shared recipe goes private (D31) — not a silent, untracked drop. `PROTECT` itself stays as-is
+for deleting a single recipe/ingredient on its own; only the whole-account delete gets the
+pre-pass.
+
 ### Entitle as admin
 
 A toggle setting `is_staff`. Guarded so that the last remaining admin cannot be demoted or
@@ -156,6 +170,9 @@ password.
 - Import with a duplicate name in-file: rejected as ambiguous.
 - Deleting a user who owns objects other users have *copied*: copies survive with
   `copied_from` nulled (task 03).
+- Deleting a user whose recipe/ingredient is *referenced directly* (not copied) by another
+  user's dish or recipe: the pre-pass above (`ARCHITECTURE.md` D53) neutralizes it gracefully
+  rather than refusing outright.
 - Admin editing another user's object: allowed by design — that is what an admin control panel
   is for — but logged.
 - A staff user with `must_change_password=True`: locked out of the admin until they reset.

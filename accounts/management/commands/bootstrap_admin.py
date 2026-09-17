@@ -108,9 +108,25 @@ class Command(BaseCommand):
             "password, or pass a different --username to leave it alone."
         )
 
+    def _audit(self, user: User, context: str) -> None:
+        """Record the temp-password issue and the entitlement grant (D26; 09.8 / 09.13).
+
+        ``bootstrap_admin`` (and its ``--force`` recovery path) is a temp-password issuer and
+        an entitlement granter, and must leave the same audit trail as the admin UI. It
+        deliberately sits **outside** the last-admin guard: ``--force`` is the documented
+        recovery route for when the only admin is already locked out, and it is gated behind
+        shell access, which is root-equivalent for this deployment.
+        """
+        from core.services import audit
+
+        audit.record_temp_password_issued(actor=None, target=user, context=context)
+        audit.record_entitlement_change(actor=None, target=user, granted=True)
+
     def _create(self, user: User) -> None:
         try:
-            temp_password = set_temp_password(user)
+            with transaction.atomic():
+                temp_password = set_temp_password(user)
+                self._audit(user, "bootstrap_admin")
         except IntegrityError as exc:
             # Only reachable as a race: the username was free when checked just above. Says so
             # rather than guessing at which kind of account claimed it.
@@ -134,6 +150,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             user.save(update_fields=["is_active", "is_staff", "is_superuser"])
             temp_password = set_temp_password(user)
+            self._audit(user, "bootstrap_admin --force")
         self.stdout.write(
             self.style.SUCCESS(
                 f"Reset admin user {user.username!r} (reactivated, staff and superuser granted)."

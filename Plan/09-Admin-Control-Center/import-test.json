@@ -1,0 +1,29 @@
+  {
+212      "version": 1,
+213      "ingredients": [
+214        {"name": "DT Test Flour", "default_unit": "g", "tags": ["gluten-free"]},
+215        {"name": "DT Test Butter", "default_unit": "g"}
+216      ],
+217      "recipes": [
+218        {
+219          "name": "DT Test Shortbread",
+220          "yield_quantity": "12", "yield_unit": "each", "role": "SIDE",
+221          "instructions": "Mix, chill, bake.",
+222          "components": [
+223            {"ingredient": "DT Test Flour", "quantity": "250", "unit": "g"},
+224            {"ingredient": "DT Test Butter", "quantity": "170", "unit": "g"}
+225          ]
+226        },
+227        {
+228          "name": "DT Test Cookie Plate",
+229          "yield_quantity": "1", "yield_unit": "each",
+230          "components": [
+231            {"sub_recipe": "DT Test Shortbread", "quantity": "6", "unit": "each"}
+232          ]
+233        }
+234      ],
+235      "dishes": [
+236        {"name": "DT Test Dessert", "recipes": ["DT Test Cookie Plate"], "tags": ["kid friendly"]}
+237      ]
+238    }
+23

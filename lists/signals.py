@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db.models import Q
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 
@@ -84,3 +85,52 @@ def tombstone_ingredient_items(
     _tombstone_content_only(
         instance, fk_field="ingredient", other_fks=("recipe", "dish"), text=INGREDIENT_TOMBSTONE
     )
+
+
+def tombstone_items_for_owner_deletion(owner: Any) -> int:
+    """Stamp fallback text on every content-only ``ListItem`` that a cascade delete of
+    ``owner`` would leave with no content — the two-FK blind spot in the per-model receivers
+    above (``ARCHITECTURE.md`` D41).
+
+    Deleting a user CASCADEs ``OwnedModel.owner``, so all of ``owner``'s recipes, dishes and
+    ingredients are collected in one pass and *every* FK on a referencing ``ListItem`` is
+    nulled together. The per-model ``pre_delete`` receivers each skip a line that still has
+    another content FK set (``populate_shopping_list`` writes ``ingredient`` + ``dish``
+    together), so a same-pass delete of both nulls both and ``lists_listitem_has_content``
+    aborts the whole transaction — taking out a bystander's shopping list.
+
+    Called by ``accounts.services.delete_user`` *before* ``user.delete()`` so the collector
+    only ever sees already-valid rows. A line that keeps at least one content FK pointing at
+    an object ``owner`` does **not** own, or that carries its own ``text``, is left untouched.
+    Returns the number of items stamped.
+    """
+    candidates = (
+        ListItem.objects.filter(text="")
+        .filter(Q(recipe__owner=owner) | Q(dish__owner=owner) | Q(ingredient__owner=owner))
+        .select_related("recipe", "dish", "ingredient")
+    )
+    stamped = 0
+    for item in candidates:
+        survives = any(
+            (
+                item.recipe_id and item.recipe.owner_id != owner.pk,
+                item.dish_id and item.dish.owner_id != owner.pk,
+                item.ingredient_id and item.ingredient.owner_id != owner.pk,
+            )
+        )
+        if survives:
+            continue
+        # A two-FK generated line carries ``ingredient`` + ``dish`` (the
+        # ``populate_shopping_list`` shape) but *represents* an ingredient quantity, so the
+        # ingredient label describes it best — check ``ingredient`` before the others rather
+        # than after (09 review, non-blocking).
+        if item.ingredient_id:
+            text = INGREDIENT_TOMBSTONE
+        elif item.recipe_id:
+            text = RECIPE_TOMBSTONE
+        else:
+            text = DISH_TOMBSTONE
+        item.text = text
+        item.save(update_fields=["text"])
+        stamped += 1
+    return stamped

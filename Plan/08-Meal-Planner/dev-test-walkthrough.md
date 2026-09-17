@@ -1,8 +1,8 @@
 # 08 — Meal Planner · Manual dev-test walkthrough
 
-> Scratch file for the human dev-test pass. **Delete before merging `task/08-meal-planner`.**
-> Not part of the Definition of Done — the automated `test-plan.md` is. This is the
-> click-through that confirms the feature feels right in a browser.
+> Scratch file for the human dev-test pass. Not part of the Definition of Done — the
+> automated `test-plan.md` is. This is the click-through that confirms the feature feels
+> right in a browser.
 
 Runs against the dev-test dataset seeded on `fedora-headless` (2026-09-06). If that data is
 gone, re-seed from the session scratchpad `seed_devtest.py` or rebuild equivalent data:

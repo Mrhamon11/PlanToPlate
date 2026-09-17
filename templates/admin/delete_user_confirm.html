@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<p>
+  Deleting <strong>{{ object.username }}</strong> is permanent and cascades to
+  <em>everything this account owns</em>:
+</p>
+
+<ul>
+  {% for label, count in model_counts %}
+    <li>{{ count }} {{ label }}</li>
+  {% empty %}
+    <li>no owned objects</li>
+  {% endfor %}
+</ul>
+
+<p>
+  Objects other users have <em>copied</em> from this account survive, with their
+  <code>copied_from</code> link cleared. A recipe another account put in their own dish, or
+  used as a sub-recipe or ingredient — without copying it — also survives, with that reference
+  cleared instead of blocking the delete.
+</p>
+
+<form method="post">{% csrf_token %}
+  <fieldset class="module aligned">
+    <p>
+      <label for="id_confirmation">
+        Type the username <code>{{ object.username }}</code> to confirm:
+      </label>
+      <input type="text" name="confirmation" id="id_confirmation" autocomplete="off" autocapitalize="off">
+    </p>
+  </fieldset>
+  <div class="submit-row">
+    <input type="submit" value="Delete this user" class="deletelink">
+    <a href="{{ changelist_url }}" class="closelink">Cancel</a>
+  </div>
+</form>
+{% endblock %}

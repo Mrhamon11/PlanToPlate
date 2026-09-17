@@ -171,14 +171,22 @@ class DishDetailView(LoginRequiredMixin, OwnedObjectMixin, RecordsRecentView, De
         is_owner = user.is_authenticated and dish.owner_id == user.id
         context["is_owner"] = is_owner
 
+        all_components = list(dish.components.all())
         visible_ids = set(
             Recipe.objects.visible_to(user)
-            .filter(pk__in=[c.recipe_id for c in dish.components.all()])
+            .filter(pk__in=[c.recipe_id for c in all_components])
             .values_list("pk", flat=True)
         )
-        visible_components = [c for c in dish.components.all() if c.recipe_id in visible_ids]
+        visible_components = [c for c in all_components if c.recipe_id in visible_ids]
+        # A component with recipe_id=None is tombstoned (D53 — its recipe's owning account was
+        # deleted), not visibility-hidden. Counted and messaged separately so a dish's own owner
+        # doesn't see a misleading "not shared with you" for a recipe that no longer exists.
+        tombstoned_component_count = sum(1 for c in all_components if c.recipe_id is None)
         context["components"] = visible_components
-        context["hidden_component_count"] = len(dish.components.all()) - len(visible_components)
+        context["hidden_component_count"] = (
+            len(all_components) - len(visible_components) - tombstoned_component_count
+        )
+        context["tombstoned_component_count"] = tombstoned_component_count
         context["combined_ingredients"] = dish.flatten(viewer=user)
         context["total_minutes"] = total_minutes_for([c.recipe for c in visible_components])
         context["roles"] = sorted(roles_for([c.recipe for c in visible_components]))
@@ -211,6 +219,11 @@ def _blank_component_row() -> dict[str, Any]:
 
 
 def _saved_component_rows(dish: Dish) -> list[dict[str, Any]]:
+    """The dish edit form's pre-filled rows. A tombstoned component (D53 — its recipe was
+    nulled by another account's deletion) is dropped rather than shown: there is nothing left
+    to edit, and re-saving the form already fully replaces the component set, which is how the
+    orphaned row is finally cleaned up.
+    """
     return [
         {
             "ref": component.recipe_id,
@@ -218,6 +231,7 @@ def _saved_component_rows(dish: Dish) -> list[dict[str, Any]]:
             "servings": component.servings,
         }
         for component in dish.components.all()
+        if component.recipe_id
     ]
 
 

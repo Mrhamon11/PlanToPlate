@@ -19,6 +19,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Q
 
 from catalog.exceptions import IncompatibleUnits
 from catalog.models import Ingredient, Unit
@@ -85,7 +86,7 @@ def parse_component_drafts(data: QueryDict, *, user) -> list[ComponentDraft]:
         unit = _resolve_unit(raw_unit)
 
         if sub_recipe is not None:
-            _assert_unit_scalable(sub_recipe, quantity, unit)
+            assert_sub_recipe_unit_scalable(sub_recipe, quantity, unit)
 
         drafts.append(ComponentDraft(ingredient, sub_recipe, quantity, unit, note))
 
@@ -201,7 +202,47 @@ def _parse_quantity(raw: str) -> Decimal:
     return quantity
 
 
-def _assert_unit_scalable(sub_recipe: Recipe, quantity: Decimal, unit: Unit) -> None:
+def neutralize_protect_blockers_for_owner_deletion(owner) -> None:
+    """Clear every ``RecipeComponent.ingredient`` / ``sub_recipe`` ``PROTECT`` blocker that
+    ``accounts.services.delete_user`` would otherwise hit deleting ``owner`` (``ARCHITECTURE.md``
+    D53) — called from that service's pre-pass, before ``owner.delete()`` runs.
+
+    A ``RecipeComponent`` only blocks the cascade when the object it references (``ingredient``
+    or ``sub_recipe``) belongs to ``owner`` — that is what is about to be deleted. Two shapes:
+
+    - **Self-owned**: the component's own ``recipe`` also belongs to ``owner``, so the
+      component row is cascading away in the very same ``owner.delete()`` (its ``recipe`` FK is
+      ``CASCADE``). Django's collector does not know that yet when it checks ``PROTECT``, so
+      these rows are deleted outright here, ahead of the cascade — nothing is lost that was not
+      already going away.
+    - **Cross-owner (bystander)**: the component's ``recipe`` belongs to someone else, who is
+      not being deleted and whose recipe must survive. The referencing field is set to ``None``
+      instead (the row's XOR-or-neither constraint allows this — see ``RecipeComponent``'s
+      docstring), the same graceful-degradation pattern ``ListItem.recipe``/``dish``/
+      ``ingredient`` already use for a recipe gone private (D31). Every read path that flattens
+      or displays a component already tolerates both fields being ``None``.
+
+    The self-owned delete must run first: once those rows are gone, a plain
+    ``filter(ingredient__owner=owner)`` / ``filter(sub_recipe__owner=owner)`` update only ever
+    matches the remaining cross-owner rows.
+    """
+    RecipeComponent.objects.filter(recipe__owner=owner).filter(
+        Q(ingredient__owner=owner) | Q(sub_recipe__owner=owner)
+    ).delete()
+    RecipeComponent.objects.filter(ingredient__owner=owner).update(ingredient=None)
+    RecipeComponent.objects.filter(sub_recipe__owner=owner).update(sub_recipe=None)
+
+
+def assert_sub_recipe_unit_scalable(sub_recipe: Recipe, quantity: Decimal, unit: Unit) -> None:
+    """Raise ``ComponentError`` if a sub-recipe component called for in ``unit`` cannot be
+    scaled to ``sub_recipe.yield_unit`` — the flattener divides by
+    ``convert(quantity, unit, yield_unit)``, so an incompatible pair produces a row that only
+    blows up later in ``flatten``.
+
+    The single implementation of this rule (CLAUDE.md §6). The REST path
+    (``recipes/serializers.py``), the importer (``core/services/importer.py``) and the admin
+    forms (``recipes/admin.py``) all enforce the same check on their own write paths.
+    """
     try:
         convert(quantity, unit, sub_recipe.yield_unit)
     except IncompatibleUnits as exc:
@@ -216,7 +257,9 @@ __all__ = [
     "ComponentDraft",
     "ComponentError",
     "assert_drafts_acyclic",
+    "assert_sub_recipe_unit_scalable",
     "ingredient_choices",
+    "neutralize_protect_blockers_for_owner_deletion",
     "parse_component_drafts",
     "replace_components",
     "sub_recipe_choices",
