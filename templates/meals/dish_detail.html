@@ -46,6 +46,9 @@
         {% if hidden_component_count %}
             <p class="text-muted">{{ hidden_component_count }} recipe{{ hidden_component_count|pluralize }} in this dish {{ hidden_component_count|pluralize:"is,are" }} not shared with you.</p>
         {% endif %}
+        {% if tombstoned_component_count %}
+            <p class="text-muted">{{ tombstoned_component_count }} recipe{{ tombstoned_component_count|pluralize }} in this dish {{ tombstoned_component_count|pluralize:"was,were" }} removed.</p>
+        {% endif %}
     </section>
 
     <section class="recipe-section">

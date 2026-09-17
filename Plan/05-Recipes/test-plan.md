@@ -10,7 +10,7 @@
 | `test_yield_required` | A recipe with no yield cannot be saved. |
 | `test_yield_zero_rejected` | Zero yield is a division by zero in flatten. |
 | `test_negative_yield_rejected` | |
-| `test_component_requires_exactly_one_target` | Both set → constraint error; neither set → constraint error. |
+| `test_component_requires_at_most_one_target` | Both set → constraint error. Neither set succeeds (D53, task 09 rework): the DB constraint was relaxed from "exactly one" to "at most one" so `delete_user`'s PROTECT-clearing pre-pass can tombstone a bystander's component; every application write path still only ever produces an exactly-one row. |
 | `test_components_ordered_by_position` | |
 | `test_delete_ingredient_in_use_protected` | `ProtectedError`. |
 | `test_delete_subrecipe_in_use_protected` | |

@@ -102,6 +102,11 @@ class ForcePasswordChangeMiddleware:
         for reverse_exempt_path in (
             lambda: reverse("accounts:password_change"),
             lambda: reverse("accounts:logout"),
+            # /admin/logout/ — the admin's own logout view. Deferred from task 01: a staff
+            # user mid-forced-change must be able to leave by every logout route, not only
+            # /accounts/logout/. The custom AdminSite.has_permission (task 09) already bars
+            # this user from the rest of the admin; this only unblocks the way out.
+            lambda: reverse("admin:logout"),
             api_password_change_path,
             api_logout_path,
         ):

@@ -188,9 +188,7 @@ class MealPlanEntrySerializer(serializers.ModelSerializer):
 
         return obj.dish is not None and is_composed(obj.dish)
 
-    def update(
-        self, instance: MealPlanEntry, validated_data: dict[str, Any]
-    ) -> MealPlanEntry:
+    def update(self, instance: MealPlanEntry, validated_data: dict[str, Any]) -> MealPlanEntry:
         """A manual dish swap is a deliberate override, so it clears ``is_locked`` — the same
         behaviour as the HTML ``PlanEntrySwapView`` (owner decision, 08 final rework). Only a
         PATCH that actually changes ``dish`` touches the lock; one that sets ``is_locked``

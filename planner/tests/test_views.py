@@ -336,9 +336,7 @@ def test_reroll_htmx_updates_one_card(client_as, saved_plan):
     assert after == others_before
 
 
-def test_manual_swap_clears_lock_html(
-    client_as, saved_plan, make_dish, make_recipe, add_component
-):
+def test_manual_swap_clears_lock_html(client_as, saved_plan, make_dish, make_recipe, add_component):
     """The HTML swap path clears ``is_locked`` on a manual swap — pinned so the API twin
     stays aligned with it (owner decision, 08 final rework)."""
     client, alice = client_as(username="alice")

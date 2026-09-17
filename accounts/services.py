@@ -1,16 +1,21 @@
-"""Business logic for the temp-password flow — see MILESTONES.md section 6 and
-Plan/01-Users-And-Auth/design.md.
+"""Business logic for the temp-password flow and admin account administration — see
+MILESTONES.md section 6 and Plan/01-Users-And-Auth/design.md / Plan/09-Admin-Control-Center/
+design.md ("User management").
 
-Views and the future ``bootstrap_admin`` management command call into this module rather than
-touching ``User`` fields directly, so the "generate once, never store plaintext, revoke
-atomically" rules live in exactly one place.
+Views, the ``bootstrap_admin`` management command, and the admin's custom create-user /
+reset-password / entitlement / delete flows call into this module rather than touching
+``User`` fields directly, so the "generate once, never store plaintext, revoke atomically"
+rules — and the last-admin guard — live in exactly one place.
 """
+
+from __future__ import annotations
 
 import secrets
 from datetime import timedelta
 
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 
@@ -158,3 +163,172 @@ def complete_password_change(user: User, new_password: str) -> None:
         # plaintext sitting on the in-memory instance.
         user._password = None
         raise
+
+
+# --- Admin account administration (task 09.5–09.8) ------------------------------------------
+
+
+class LastAdminError(Exception):
+    """The requested change would remove admin access from the only account that has it —
+    refused, because a self-hosted app has no recovery path once every admin is locked out
+    (design.md, "Entitle as admin" / "Edge cases").
+    """
+
+
+def active_admins() -> QuerySet[User]:
+    """Every account that can currently reach the admin: ``is_staff`` and ``is_active``.
+
+    ``PlanToPlateAdminSite.has_permission`` also excludes an account mid-forced-password-change,
+    but that state is transient (it clears the moment they set a real password) — a temporary
+    block is not the same as having lost admin access, so the last-admin guard does not count
+    it against them.
+    """
+    return User.objects.filter(is_staff=True, is_active=True)
+
+
+def is_last_admin(user: User) -> bool:
+    """Whether ``user`` is the only active admin — so demoting or deleting them locks everyone
+    out.
+    """
+    if not (user.is_staff and user.is_active):
+        return False
+    return not active_admins().exclude(pk=user.pk).exists()
+
+
+def invalidate_sessions(user: User) -> int:
+    """Delete every server-side session belonging to ``user``.
+
+    Resetting a possibly-compromised password is pointless if the attacker's existing session
+    survives (design.md, "Reset password"). ``set_temp_password``'s hash cycle already fails
+    the session-auth-hash check on the next request; this removes the rows outright so nothing
+    lingers. DB session backend only (``SESSION_ENGINE``); returns the count removed.
+    """
+    from django.contrib.sessions.models import Session
+
+    target = str(user.pk)
+    keys = [
+        session.session_key
+        for session in Session.objects.iterator()
+        if session.get_decoded().get("_auth_user_id") == target
+    ]
+    if not keys:
+        return 0
+    Session.objects.filter(pk__in=keys).delete()
+    return len(keys)
+
+
+def create_user(
+    *,
+    actor: User,
+    username: str,
+    email: str = "",
+    first_name: str = "",
+    last_name: str = "",
+    is_staff: bool = False,
+) -> tuple[User, str]:
+    """Provision a new account with a one-time temp password (design.md, "Create user").
+
+    Returns ``(user, temp_password)``. The caller must show the password exactly once and
+    never persist it — ``set_temp_password`` already stores only its hash, forces a change,
+    and sets the 7-day expiry. Emits the audit records for the temp password and, if the new
+    account is staff, the entitlement grant.
+
+    The account write and its audit records share one transaction: a failed ``LogEntry``
+    insert rolls the new account back rather than leaving an issued-but-unrecorded password.
+    """
+    from core.services import audit
+
+    user = User(
+        username=username,
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        is_staff=is_staff,
+    )
+    with transaction.atomic():
+        temp_password = set_temp_password(user)
+        audit.record_temp_password_issued(actor=actor, target=user, context="user created")
+        if is_staff:
+            audit.record_entitlement_change(actor=actor, target=user, granted=True)
+    return user, temp_password
+
+
+def reset_password(*, actor: User, user: User) -> str:
+    """Issue ``user`` a fresh temp password, force a change, reset the expiry, and kill every
+    session they hold (design.md, "Reset password"). Returns the new temp password to show
+    once. Emits the temp-password audit record.
+
+    The password write, the session kill, and the audit record share one transaction — a
+    failed ``LogEntry`` insert must not leave a reset password with no trail.
+    """
+    from core.services import audit
+
+    with transaction.atomic():
+        temp_password = set_temp_password(user)
+        invalidate_sessions(user)
+        audit.record_temp_password_issued(actor=actor, target=user, context="admin reset")
+    return temp_password
+
+
+def set_entitlement(*, actor: User, user: User, is_staff: bool) -> bool:
+    """Grant or revoke ``user``'s admin entitlement (``is_staff``).
+
+    Refuses to demote the last active admin (``LastAdminError``). A no-op change writes
+    nothing and emits no audit record. Returns ``True`` if a change was applied.
+    """
+    from core.services import audit
+
+    if user.is_staff == is_staff:
+        return False
+    if not is_staff and is_last_admin(user):
+        raise LastAdminError(
+            f"{user.username} is the only active admin — grant another account admin access "
+            "before removing this one's."
+        )
+    user.is_staff = is_staff
+    user.save(update_fields=["is_staff"])
+    audit.record_entitlement_change(actor=actor, target=user, granted=is_staff)
+    return True
+
+
+def delete_user(*, actor: User, user: User) -> None:
+    """Delete ``user`` and everything ``OwnedModel.owner`` CASCADEs from them.
+
+    Refuses to delete the last active admin (``LastAdminError``). Runs two pre-passes before
+    ``user.delete()``, all in the same transaction as the delete itself:
+
+    1. **D53 PROTECT-clearing** (``meals.services.dishes`` /
+       ``recipes.services.components``): ``DishComponent.recipe`` and
+       ``RecipeComponent.ingredient``/``sub_recipe`` are ``on_delete=PROTECT``, deliberately —
+       so an ordinary single-recipe/ingredient delete cannot be pulled out from under a
+       dependent. Left alone that also blocks *this* whole-account delete, on both the
+       everyday case (the user's own recipe is in their own dish) and the sharing case (a
+       bystander's dish/recipe uses something this user shared) — Django's collector has no
+       notion of "already scheduled for deletion in this same call". Self-owned blockers are
+       deleted outright; cross-owner ones are neutralized (``SET_NULL`` + graceful
+       degradation), never silently refused.
+    2. **D41 tombstoning** (``lists.signals``): a two-FK generated ``ListItem`` on a
+       *bystander's* shopping list is stamped with fallback text so it is not caught in the
+       cascade's crossfire (``ARCHITECTURE.md`` D41; ``design.md``, "Delete user").
+
+    The audit ``LogEntry`` for the deletion itself is written by the admin layer (Django's
+    ``ModelAdmin.log_deletion``), consistent with every other admin delete.
+    """
+    from lists.signals import tombstone_items_for_owner_deletion
+    from meals.services.dishes import (
+        neutralize_protect_blockers_for_owner_deletion as neutralize_dish_components,
+    )
+    from recipes.services.components import (
+        neutralize_protect_blockers_for_owner_deletion as neutralize_recipe_components,
+    )
+
+    if is_last_admin(user):
+        raise LastAdminError(
+            f"{user.username} is the only active admin — deleting this account locks everyone "
+            "out, with no recovery path."
+        )
+    with transaction.atomic():
+        neutralize_dish_components(user)
+        neutralize_recipe_components(user)
+        tombstone_items_for_owner_deletion(user)
+        user.delete()

@@ -15,7 +15,7 @@ from django.contrib.messages import get_messages
 from django.urls import reverse
 
 from core.models import Visibility
-from meals.models import Dish, RecipeBook, RecipeBookEntry
+from meals.models import Dish, DishComponent, RecipeBook, RecipeBookEntry
 
 pytestmark = pytest.mark.django_db
 
@@ -89,6 +89,30 @@ def test_dish_detail_shows_combined_ingredients(
     assert "Salsa" in content and "Sauce" in content
     # 300 g x2 + 500 g x1 = 1100 g of Tomato, aggregated onto one line
     assert "1100" in content
+
+
+def test_dish_detail_tombstoned_component_shows_removed_message(
+    logged_in, make_dish, make_recipe, add_component
+):
+    """D53: a component whose recipe was nulled by another account's deletion is a distinct
+    case from a visibility-hidden one — the dish's own owner (nothing was ever shared or
+    unshared with them) must see a "removed" message, never the misleading "not shared with
+    you" (``Plan/09-Admin-Control-Center/.review-findings.md``, finding 1).
+    """
+    client, me = logged_in
+    recipe = make_recipe(name="Doomed Recipe", owner=me, visibility=Visibility.PRIVATE)
+    dish = make_dish(name="Orphaned Dinner", owner=me)
+    component = add_component(dish, recipe, servings="2", position=0)
+    # Stands in for the D53 pre-pass neutralizing the PROTECT FK during delete_user, without
+    # running the whole account-deletion flow.
+    DishComponent.objects.filter(pk=component.pk).update(recipe=None)
+
+    response = client.get(reverse("meals:dish-detail", args=[dish.pk]))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "1 recipe in this dish was removed" in content
+    assert "not shared with you" not in content
 
 
 def test_dish_made_and_favorite_use_requesters_stats(logged_in, make_dish):

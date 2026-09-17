@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script src="{% static 'js/admin-copy.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+{% if temp_password %}
+  <div class="module aligned">
+    <h2>User <code>{{ created_user.username }}</code> created</h2>
+    <p><strong>Temporary password — shown once, right now. It will not be shown again.</strong></p>
+    <p>
+      <code id="temp-password">{{ temp_password }}</code>
+      <button type="button" class="button"
+              onclick="ptpCopyToClipboard(this, document.getElementById('temp-password').textContent)">
+        Copy
+      </button>
+      <span class="copy-feedback" aria-live="polite"></span>
+    </p>
+    <p>
+      It is not stored anywhere and appears in no log. The account must set a real password on
+      first login; this one expires in 7 days.
+    </p>
+    <p>
+      <a href="{% url 'admin:accounts_user_create' %}">Create another user</a> &middot;
+      <a href="{{ changelist_url }}">Back to users</a>
+    </p>
+  </div>
+{% else %}
+  <p>
+    A one-time temporary password is generated automatically — you do not set one here. It is
+    shown once on the next screen.
+  </p>
+  <form method="post">{% csrf_token %}
+    <fieldset class="module aligned">
+      {{ form.as_p }}
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" value="Create user" class="default">
+      <a href="{{ changelist_url }}" class="closelink">Cancel</a>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}

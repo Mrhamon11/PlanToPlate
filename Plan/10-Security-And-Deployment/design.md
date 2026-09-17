@@ -79,6 +79,37 @@ Task 01 throttled login. Extend to: password change (5/min), admin actions (30/m
 import endpoint (5/hour), and a global authenticated default (1000/hour) that is generous for
 20 humans and a hard ceiling for a script.
 
+### Carried-in finding (task 09 review, 2026-09-08)
+
+Task 09's `design.md` states "Admin actions are rate-limited the same as login," but task 09
+shipped none — the throttle work is deferred here per D25 / 10.5. When 10.5 lands, remember
+that the task-09 admin actions (`accounts.admin` `create_user_view`, `reset_temp_password`,
+`grant_admin` / `revoke_admin`, and `config.admin` `import_json_view`) are **Django admin
+views, not DRF viewsets**, so a DRF `ScopedRateThrottle` will not cover them automatically.
+The import endpoint's `5/hour` cap in particular needs an explicit throttle on
+`import_json_view`. Low urgency for this threat model (staff + session already required, 10–20
+users behind Tailscale), but it is the gap between the two design docs.
+
+### Carried-in finding (task 09 review, 2026-09-08) — importer object-count cap
+
+`core/schemas.count_objects` (the JSON importer's DoS guard) only counts entries under the
+known `SECTIONS` keys. Arrays placed under other top-level keys are not counted, so the
+1000-object cap can be evaded — the payload is still bounded by the 5 MB size cap and the
+depth-10 nesting cap, so this is defence-in-depth, not an open hole. When importer hardening
+is done here, make `count_objects` count list lengths recursively across the whole document
+rather than only the recognised sections. Staff-only endpoint behind Tailscale, so low
+urgency.
+
+### Carried-in finding (task 09 rework, 2026-09-08) — importer TOCTOU on sub-recipe yield_unit
+
+The 09 rework added the sub-recipe unit-scalability guard to `core/services/importer.py` at
+**validation time**, matching the REST and HTML write paths (which also validate only).
+`_apply_recipe_components` in `execute()` does not re-check it. If an existing sub-recipe's
+`yield_unit` changes between `validate` and `execute`, one non-scalable `RecipeComponent` row
+could still be written. Very low risk (single-admin app, one short atomic transaction, the
+cycle guard is the only thing `execute` currently re-checks). If importer hardening adds a
+defensive re-check pass to `execute`, fold unit-scalability in alongside the cycle guard.
+
 ## Deployment
 
 ### Topology

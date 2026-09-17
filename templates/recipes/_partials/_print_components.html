@@ -17,6 +17,8 @@ Context:
                 {{ component.ingredient.name }}
             {% elif component.sub_recipe_id %}
                 {{ component.sub_recipe.name }} <em>(sub-recipe)</em>
+            {% else %}
+                <em>(removed)</em>
             {% endif %}
             {% if component.note %}— {{ component.note }}{% endif %}
             {% if component.sub_recipe_id %}

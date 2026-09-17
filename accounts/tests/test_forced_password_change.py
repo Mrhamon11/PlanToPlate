@@ -100,6 +100,39 @@ def test_logout_not_redirected(client, user_factory):
     assert get_user(client).is_anonymous
 
 
+def test_admin_logout_not_shadowed_by_change_form_during_forced_change(client, user_factory):
+    """Deferred from task 01: without ``/admin/logout/`` in the exemption set, a staff user
+    mid-forced-change who POSTs there is bounced to the password-change form by this
+    middleware. The exemption stops that. (Task 09's tightened ``AdminSite.has_permission``
+    then has ``AdminSite.admin_view`` redirect the same request to ``/admin/`` — this user's
+    actually-working logout route is ``/accounts/logout/``, covered by the test above.)
+    """
+    user = user_factory(username="stale-admin", is_staff=True, must_change_password=True)
+    client.force_login(user)
+
+    response = client.post(reverse("admin:logout"))
+
+    assert response.status_code == 302
+    assert response["Location"] != reverse("accounts:password_change")
+    # The middleware no longer shadows this path; the tightened AdminSite.has_permission then
+    # sends the request to the admin index (its "no permission on a logout path" branch), not
+    # back to /admin/login/. Asserting the concrete target catches a regression that redirects
+    # to the login page instead (09.1-09.4 review, non-blocking #3).
+    assert response["Location"] == reverse("admin:index")
+
+
+def test_admin_logout_works_for_a_normal_staff_user(client, user_factory):
+    """The exemption does not break the ordinary case — a staff user with no pending change
+    still logs out through ``/admin/logout/``.
+    """
+    user = user_factory(username="plain-admin", is_staff=True)
+    client.force_login(user)
+
+    client.post(reverse("admin:logout"))
+
+    assert get_user(client).is_anonymous
+
+
 def test_api_returns_403_not_redirect(client, user_factory):
     user = user_factory(must_change_password=True)
     client.force_login(user)

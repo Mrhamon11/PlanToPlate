@@ -32,7 +32,9 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    # Not the bare "django.contrib.admin" — this AppConfig points the admin at the project's
+    # custom AdminSite (config/admin.py) via Django's documented default_site override.
+    "config.apps.PlanToPlateAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

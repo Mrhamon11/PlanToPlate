@@ -328,3 +328,60 @@ need a full design) only when a subtask is actually picked up.
   `<option value="">` and a "— clear this slot —" `<option value="">`. Harmless (both submit an
   empty `dish`, which clears the slot) but odd markup. Drop the duplicate or merge the labels.
   Fold into any future planner UI polish pass. Sibling of [[11.12]] / [[11.13]] / [[11.15]].
+
+- [ ] **11.30 — Blank `ListItemInline` row 500s on the content constraint**
+  *Found in:* task 09 review (NB1), 2026-09-08. `lists/admin.py` (`ListItemInline`).
+  *Issue:* `ListItemInline` has no custom form, every field is nullable and `text` is
+  `blank=True`, so an admin who clicks "Add another" under a `List` and submits the empty row
+  passes form validation and then hits `IntegrityError` from the `lists_listitem_has_content`
+  check constraint. `RecipeComponentInline` is guarded by the XOR mixin; `ListItemInline` is
+  not — and the same class of gap turns `ListAdmin` model-constraint violations (e.g. a second
+  `is_default_shopping_list` for one owner) into raw 500s rather than form errors the way
+  `OwnedModelAdminForm` handles owner/`is_system`. *Fix:* a minimal `ListItemInline` form whose
+  `clean()` raises `ValidationError` when the row has neither `text` nor a content FK; consider
+  the `ListAdmin` constraint-to-form-error gap in the same pass. Admin-only, needs a deliberate
+  empty add — low priority. Sibling of [[11.16]] in being admin-form hardening.
+
+- [ ] **11.31 — No POST/redirect/GET on the admin create-user and JSON-import views**
+  *Found in:* task 09 review (NB3), 2026-09-08. `accounts/admin.py` (`create_user_view`),
+  `core/admin.py` (`import_json_view`).
+  *Issue:* both render their result straight from the POST handler, so a browser refresh
+  re-submits. Create-user re-POSTs and fails on username uniqueness (ugly but harmless error
+  page); import re-runs (idempotent in `skip-existing`, re-applies in `update-existing`). Minor
+  operator-surprise on an admin-only page. *Fix:* stash the one-time result (temp password /
+  import summary) in the session and redirect to a GET result page, or accept as-is.
+
+- [ ] **11.32 — Dish detail's "no recipes yet" and tombstoned/hidden messages can render together, contradicting each other**
+  *Found in:* task 09 D53 dev-test rework, review pass 2 (NB1), 2026-09-17.
+  `templates/meals/dish_detail.html:36-51`.
+  *Issue:* when a dish's directly-renderable component list is empty because every component is
+  either D53-tombstoned or visibility-hidden (e.g. a dish whose only component just got
+  tombstoned), the `{% for component in components %}...{% empty %}` loop falls through to
+  "This dish has no recipes yet." at the same time the "N recipe(s) in this dish was/were
+  removed." (or "...not shared with you.") message renders below it — "never had any" directly
+  contradicting "was removed" on the same page, for the dish's own owner. Pre-existing for the
+  hidden-only case (not introduced by the D53 rework), just newly exercised by it. *Fix:* gate
+  the `{% empty %}` branch on `hidden_component_count` and `tombstoned_component_count` both
+  being falsy.
+
+- [ ] **11.33 — Missing test coverage: tombstoned+hidden coexistence and plural tombstoned wording on dish detail**
+  *Found in:* task 09 D53 dev-test rework, review pass 2 (NB2), 2026-09-17.
+  `meals/tests/test_views.py` (`test_dish_detail_tombstoned_component_shows_removed_message`).
+  *Issue:* the test added for [[11.32]]'s sibling fix (separating `tombstoned_component_count`
+  from `hidden_component_count` in `DishDetailView.get_context_data`) covers only a dish with a
+  single, purely tombstoned component. Untested: a dish where a tombstoned and a
+  visibility-hidden component coexist, and plural wording (two-plus tombstoned components → "N
+  recipes ... were removed"). Reviewer hand-verified both render correctly — this is a coverage
+  gap, not a known bug — but nothing pins the behaviour for a future edit. *Fix:* add a
+  parametrized case (or a second test) covering both scenarios.
+
+- [ ] **11.34 — Uneven per-app admin search-test coverage**
+  *Found in:* task 09 review (2026-09-08), carried to 09.14, deferred here at task close-out
+  (2026-09-17).
+  *Issue:* only `recipes/tests/test_admin.py` has a `test_search_works`; `meals` / `lists` /
+  `catalog` / `planner` set `search_fields` on their `ModelAdmin`s but exercise them only
+  through the generic `test_changelist_loads_for_each_model` (which doesn't actually search). A
+  `search_fields` entry naming a renamed/removed field raises `FieldError` only once a search
+  actually runs, so this gap is a real (if low-probability) blind spot. *Fix:* add a small
+  parametrized search smoke test in `config/tests/test_admin.py` covering every registered
+  model that declares `search_fields`.

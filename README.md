@@ -82,25 +82,23 @@ That means right now, on a clean machine, first boot brings up a working app wit
 account (`bootstrap_admin`, task 01) but an empty ingredient/unit catalog.
 
 If the admin account is ever locked out — the temp password's 7-day expiry passed with no
-login, for instance — there is no self-service recovery; reset it directly:
-
-```bash
-docker compose exec app python manage.py changepassword admin
-```
-
-`changepassword` cannot help if the account was *deactivated* (a deactivated admin cannot log
-in whatever its password is) and does not exist at all if the admin was created under another
-name. For those, re-run the bootstrap command with `--force`: it reactivates the account
-holding `--username`, re-grants staff/superuser, and prints a fresh one-time temp password,
-exactly as on first boot.
+login, the account was deactivated, or it was created under a name you no longer remember —
+there is no self-service recovery. Use `bootstrap_admin --force`:
 
 ```bash
 docker compose exec app python manage.py bootstrap_admin --force
 ```
 
+It reactivates the account holding `--username`, re-grants staff/superuser, prints a fresh
+one-time temp password exactly as on first boot, and records the grant in the admin audit log.
 Without `--force` the command refuses whenever a usable admin already exists, or the requested
 username is taken — so it stays safe to run by hand, and the entrypoint's `.ran-bootstrap_admin`
 marker means a restart never re-runs it on its own.
+
+`manage.py changepassword <user>` is a **last resort only**. It writes the password hash
+directly, so it bypasses the service layer every other password path routes through: it does
+not revoke DRF tokens, does not clear `must_change_password`, and leaves no audit record.
+Reach for it only when `bootstrap_admin --force` cannot help and you understand those gaps.
 
 ### TLS
 
