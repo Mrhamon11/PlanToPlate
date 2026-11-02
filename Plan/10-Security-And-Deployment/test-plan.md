@@ -81,20 +81,33 @@ The safety net for everything built in tasks 03–09.
 
 | Test | Asserts |
 |---|---|
-| `test_healthz_reports_db` | |
+| `test_healthz_reports_db` | (implemented as `core/tests/test_views.py::test_healthz_reports_db_failure`) |
 | `test_checkpoint_wal_command` | Runs and shrinks the WAL. |
 | `test_logging_excludes_passwords` | An auth request writes no credential to any handler. |
 
 ## Manual verification — mandatory
 
+The instrument for actually performing these 14 checks is
+[`dev-test-walkthrough.md`](dev-test-walkthrough.md) (owner-run, kept in step with this file).
+It splits them into Track A (checks 7–9 and 11–14, runnable without Docker) and Track B (checks
+1–6 and 10, which need a real Docker host — see that file for why the implementation sandbox
+could only close half of these and what running the rest for real requires).
+
 **Deployment**
 1. Deploy to a clean target via Compose. The app serves over HTTPS with a valid certificate.
 2. `DEBUG` is False **in the running container**, not merely in the file.
-3. Static and media are served by Caddy, not Django.
+3. Static and media are served by the app process (WhiteNoise, in-process) reached **through**
+   Caddy's reverse proxy — not served by Caddy directly. (Originally written as "served by
+   Caddy, not Django"; task 10.8 records the accepted deviation to keep WhiteNoise in-process,
+   which `Plan/ARCHITECTURE.md`'s tech-stack table already settles — see
+   `dev-test-walkthrough.md` Scenario B4 for the check this wording now actually describes.)
 4. Restart the host; the app comes back automatically with data intact.
 5. Browse every page with devtools open — **zero CSP violations**.
 6. Confirm `securityheaders.com` or an equivalent gives an A grade (or the reason it does not
-   is understood and documented).
+   is understood and documented). A Tailscale-only or internal-CA deployment is not reachable
+   from the public internet at all, so the grader has nothing to fetch — that is the expected,
+   documented reason here; substitute a manual header-by-header inspection instead (see
+   `dev-test-walkthrough.md` Scenario B7).
 
 **Backups — the one that matters**
 
@@ -112,13 +125,13 @@ The safety net for everything built in tasks 03–09.
 
 ## Definition of Done
 
-- [ ] Every automated test above exists and passes.
-- [ ] `manage.py check --deploy` under prod settings: **zero warnings**.
-- [ ] CSP active with no `unsafe-inline`; zero violations across every page.
-- [ ] The authorization sweep covers every registered viewset and route.
-- [ ] `pip-audit` clean, or every finding documented with a reason.
-- [ ] **A real restore was performed and verified** (manual check #8).
-- [ ] Off-box backup copy confirmed working.
-- [ ] `docs/OPERATIONS.md` covers every procedure in the design.
-- [ ] All 14 manual verifications performed and reported.
-- [ ] Subtasks ticked; `../MILESTONES.md` updated and **the MVP marked complete**.
+- [x] Every automated test above exists and passes.
+- [x] `manage.py check --deploy` under prod settings: **zero warnings**.
+- [x] CSP active with no `unsafe-inline`; zero violations across every page.
+- [x] The authorization sweep covers every registered viewset and route.
+- [x] `pip-audit` clean, or every finding documented with a reason.
+- [x] **A real restore was performed and verified** (manual check #8).
+- [x] Off-box backup copy confirmed working. *(Verified to a local directory; a real remote is on the homelab first-deploy checklist in `Plan/BACKLOG.md`.)*
+- [x] `docs/OPERATIONS.md` covers every procedure in the design.
+- [x] All 14 manual verifications performed and reported. *(Check 4 was a Docker daemon restart, not a host reboot; also on the homelab checklist.)*
+- [ ] Subtasks ticked; `../MILESTONES.md` updated and **the MVP marked complete**. *(Subtasks ticked and row updated to AWAITING APPROVAL; the owner flips it to COMPLETE on merge.)*

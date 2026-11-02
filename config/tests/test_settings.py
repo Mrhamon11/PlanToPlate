@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from django.conf import settings
@@ -23,11 +24,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 NO_ENV_FILE = "/nonexistent/plantoplate-test.env"
 
 
-def _import_settings_module(module_name: str, env: dict[str, str] | None = None, unset=()):
+def _import_settings_module(
+    module_name: str,
+    env: dict[str, str] | None = None,
+    unset=(),
+    isolate_dirs: bool = True,
+):
     """Import ``module_name`` in a subprocess; return the completed process.
 
     On success, ``stdout`` is a JSON object of every uppercase name the module defines
     (non-JSON-serialisable values, like ``Path``, are stringified).
+
+    ``isolate_dirs`` (default ``True``) points ``CACHE_DIR`` and ``LOG_DIR`` at a fresh
+    temporary directory, unless ``env`` already sets one explicitly. Both settings default
+    (in ``config.settings.prod``) to a path under this project's own ``BASE_DIR`` when unset,
+    and both are actually created at import time — ``FileBasedCache``'s directory lazily on
+    first use, and ``LOGGING``'s rotating file handlers eagerly, since a missing log directory
+    must never crash a running deployment the first time something logs. Left unisolated, every
+    test importing ``config.settings.prod`` without its own override would leave a stray
+    ``cache/`` / ``logs/`` directory (the latter with real, if empty, log files) at the repo
+    root (10.3's carried-forward finding, extended to ``LOG_DIR`` in 10.15 — the trigger for
+    fixing both here rather than letting a second instance of the same problem stand). The two
+    tests that specifically exercise the real default pass ``isolate_dirs=False`` and accept
+    that one-time side effect deliberately.
     """
     process_env = os.environ.copy()
     for key in unset:
@@ -36,20 +55,25 @@ def _import_settings_module(module_name: str, env: dict[str, str] | None = None,
     process_env.setdefault("DJANGO_ENV_FILE", NO_ENV_FILE)
     process_env.update(env or {})
 
-    script = (
-        "import importlib, json\n"
-        f"mod = importlib.import_module({module_name!r})\n"
-        "public = {k: v for k, v in vars(mod).items() if k.isupper()}\n"
-        "print(json.dumps(public, default=str))\n"
-    )
-    return subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=BASE_DIR,
-        env=process_env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(prefix="plantoplate-settings-test-") as scratch_dir:
+        if isolate_dirs:
+            process_env.setdefault("CACHE_DIR", str(Path(scratch_dir) / "cache"))
+            process_env.setdefault("LOG_DIR", str(Path(scratch_dir) / "logs"))
+
+        script = (
+            "import importlib, json\n"
+            f"mod = importlib.import_module({module_name!r})\n"
+            "public = {k: v for k, v in vars(mod).items() if k.isupper()}\n"
+            "print(json.dumps(public, default=str))\n"
+        )
+        return subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=BASE_DIR,
+            env=process_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
 
 def test_secret_key_required():
@@ -259,8 +283,11 @@ def test_drf_does_not_enable_basic_authentication():
 
 def test_prod_sets_num_proxies_for_throttle_ident():
     """Without this, DRF's ``ScopedRateThrottle`` keys on the entire client-supplied
-    ``X-Forwarded-For`` header rather than the one hop Caddy itself appends — reproduced live
-    in review as a complete login-throttle bypass via a rotating header. Prod-only: under
+    ``X-Forwarded-For`` header rather than the single rightmost entry — reproduced live in
+    review as a complete login-throttle bypass via a rotating header. (Caddy's own reverse_proxy
+    already replaces, not appends to, that header by default — see the Caddyfile and
+    ``config/settings/prod.py``'s own comments — so ``NUM_PROXIES=1`` is belt-and-braces, not
+    the only thing standing between an attacker and this bypass.) Prod-only: under
     ``runserver`` with no proxy in front, ``NUM_PROXIES=1`` would trust the *last* entry of a
     header that is still entirely attacker-controlled, which is no improvement at all.
     """
@@ -301,6 +328,149 @@ def test_prod_cache_is_shared_across_worker_processes():
         data["CACHES"]["default"]["BACKEND"]
         == "django.core.cache.backends.filebased.FileBasedCache"
     )
+
+
+def test_prod_cache_location_follows_cache_dir_env_var(tmp_path):
+    """10.3 carried finding from task 01: only ``BACKEND`` was ever asserted, so hardcoding
+    ``LOCATION`` to a fixed path (dropping the ``env("CACHE_DIR", default=...)`` read) would
+    leave the whole suite green. Pinned here: setting ``CACHE_DIR`` must change ``LOCATION`` to
+    exactly that path, not merely to *some* path under it.
+    """
+    custom_dir = tmp_path / "custom-cache"
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={
+            "SECRET_KEY": "x" * 50,
+            "ALLOWED_HOSTS": "example.com",
+            "CACHE_DIR": str(custom_dir),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["CACHES"]["default"]["LOCATION"] == str(custom_dir)
+
+
+def test_prod_cache_location_defaults_under_base_dir():
+    """The other half of the same pin: with ``CACHE_DIR`` unset, ``LOCATION`` still falls back
+    to a real, deployment-relative default (``BASE_DIR / "cache"``) rather than an empty or
+    hardcoded-elsewhere path.
+
+    ``isolate_dirs=False``: this test specifically wants the *real* default, so it deliberately
+    accepts leaving a stray, empty ``cache/`` directory at the repo root as this one test's
+    known side effect (10.3's carried-forward finding) rather than routing around it.
+    """
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={"SECRET_KEY": "x" * 50, "ALLOWED_HOSTS": "example.com"},
+        unset=["CACHE_DIR"],
+        isolate_dirs=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["CACHES"]["default"]["LOCATION"] == str(BASE_DIR / "cache")
+
+
+def test_prod_log_dir_follows_env_var(tmp_path):
+    """10.15, the ``LOG_DIR`` equivalent of ``test_prod_cache_location_follows_cache_dir_env_var``
+    above: setting ``LOG_DIR`` must change every rotating file handler's ``filename`` to exactly
+    that directory, not merely to *some* path under it.
+    """
+    custom_dir = tmp_path / "custom-logs"
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={
+            "SECRET_KEY": "x" * 50,
+            "ALLOWED_HOSTS": "example.com",
+            "LOG_DIR": str(custom_dir),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["LOG_DIR"] == str(custom_dir)
+    handlers = data["LOGGING"]["handlers"]
+    assert handlers["app_file"]["filename"] == str(custom_dir / "app.log")
+    assert handlers["error_file"]["filename"] == str(custom_dir / "error.log")
+
+
+def test_prod_log_dir_defaults_under_base_dir():
+    """The other half of the same pin, and the same accepted trade-off as
+    ``test_prod_cache_location_defaults_under_base_dir`` above: ``isolate_dirs=False`` so this
+    test can see the real default (``BASE_DIR / "logs"``), accepting the stray directory (with
+    two empty log files) as this one test's known side effect.
+    """
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={"SECRET_KEY": "x" * 50, "ALLOWED_HOSTS": "example.com"},
+        unset=["LOG_DIR"],
+        isolate_dirs=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["LOG_DIR"] == str(BASE_DIR / "logs")
+
+
+def test_prod_logging_has_rotating_app_and_error_files():
+    """10.15, design.md "Logging and monitoring": rotating file handlers, and a *separate*
+    ERROR-and-above log — not the same file re-used, and not a plain (non-rotating)
+    ``FileHandler`` that would grow forever.
+    """
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={"SECRET_KEY": "x" * 50, "ALLOWED_HOSTS": "example.com"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    handlers = json.loads(result.stdout)["LOGGING"]["handlers"]
+
+    assert handlers["app_file"]["class"] == "logging.handlers.RotatingFileHandler"
+    assert handlers["error_file"]["class"] == "logging.handlers.RotatingFileHandler"
+    assert handlers["app_file"]["filename"] != handlers["error_file"]["filename"]
+    assert handlers["error_file"]["level"] == "ERROR"
+    # Bounded, not unbounded — an unrotated log file on a home server is exactly the kind of
+    # slow disk-fill design.md's "Disk full -> SQLite corruption risk" edge case warns about.
+    assert handlers["app_file"]["maxBytes"] > 0
+    assert handlers["app_file"]["backupCount"] > 0
+    assert handlers["error_file"]["maxBytes"] > 0
+    assert handlers["error_file"]["backupCount"] > 0
+
+
+def test_prod_logging_sentry_seam_is_off_by_default():
+    """10.15: "off by default" must mean *nothing* Sentry-related runs when ``SENTRY_DSN`` is
+    unset -- not merely that no events get sent. ``sentry_sdk`` is not a project dependency
+    (see ``config/settings/prod.py``'s own comment), so this also proves importing
+    ``config.settings.prod`` never requires it to be installed.
+    """
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={"SECRET_KEY": "x" * 50, "ALLOWED_HOSTS": "example.com"},
+        unset=["SENTRY_DSN"],
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["SENTRY_DSN"] == ""
+
+
+def test_prod_logging_sentry_dsn_without_package_fails_loudly():
+    """Setting ``SENTRY_DSN`` with ``sentry-sdk`` not installed must refuse to start, not
+    silently run with no error reporting -- a misconfiguration that looks identical to "working,
+    just quiet" is worse than one that fails at import time where an operator will see it.
+    """
+    result = _import_settings_module(
+        "config.settings.prod",
+        env={
+            "SECRET_KEY": "x" * 50,
+            "ALLOWED_HOSTS": "example.com",
+            "SENTRY_DSN": "https://examplePublicKey@o0.ingest.sentry.io/0",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "ImproperlyConfigured" in result.stderr
+    assert "SENTRY_DSN" in result.stderr
 
 
 def test_prod_does_not_reenable_basic_authentication():

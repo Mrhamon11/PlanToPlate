@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "django_filters",
     "drf_spectacular",
+    "csp",
     "core",
     "accounts",
     "catalog",
@@ -55,6 +56,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Sets the Content-Security-Policy header on every response (10.4). Needs nothing from
+    # session/auth/CSRF, so it sits with the other unconditional security headers near the top
+    # rather than deeper in the stack.
+    "csp.middleware.CSPMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -224,8 +229,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Global authenticated default (10.5, design.md "Rate limiting"): every DRF view that does
+    # not declare its own throttle_classes (i.e. everything except the login endpoints and
+    # PasswordChangeAPIView, which need a tighter, differently-keyed bucket) gets this one for
+    # free. 1000/hour is generous for 20 humans and a hard ceiling for a runaway script.
+    # UserRateThrottle keys on request.user.pk when authenticated (the normal case — every
+    # endpoint but login already requires IsAuthenticated) and falls back to IP otherwise.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
+    ],
     # Login throttling (01.8, design.md "Login throttling"): keyed on IP via
-    # ScopedRateThrottle, applied to all three credential-accepting login paths —
+    # LoginRateThrottle, applied to all three credential-accepting login paths —
     # /api/auth/login/ (accounts/api.py), the HTML login view (accounts/views.py's
     # ThrottledLoginMixin), and /admin/login/ (accounts/views.py's throttled_admin_login,
     # wired in ahead of admin.site.urls in config/urls.py). All three share one bucket, so an
@@ -234,8 +248,19 @@ REST_FRAMEWORK = {
     # that locked accounts would hand an attacker a free denial-of-service lever. In
     # production this also depends on NUM_PROXIES and CACHES, both set in prod.py only — see
     # that file's comments for why neither belongs here.
+    #
+    # There is deliberately no "password_change" entry here: PasswordChangeAPIView shares that
+    # bucket with the HTML password-change view by calling
+    # core.services.ratelimit.check_rate_limit directly (accounts.throttling
+    # .PASSWORD_CHANGE_THROTTLE_SCOPE / _RATE are the one literal source), not through DRF's own
+    # throttle_classes/DEFAULT_THROTTLE_RATES machinery — a settings entry here would be dead
+    # config nothing reads, and task 10's review found that running DRF's ScopedRateThrottle
+    # against the same cache key as check_rate_limit corrupts the shared bucket (incompatible
+    # list-pruning invariants), producing false 429s.
+    # "user" backs the global default above.
     "DEFAULT_THROTTLE_RATES": {
         "login": "5/min",
+        "user": "1000/hour",
     },
 }
 
@@ -257,4 +282,31 @@ SPECTACULAR_SETTINGS = {
         "rest_framework.permissions.IsAuthenticated",
         "accounts.permissions.ForcePasswordChangeAPIPermission",
     ],
+}
+
+# Content Security Policy (10.4, design.md "Content Security Policy"). Achievable this strictly
+# ('self' everywhere, no 'unsafe-inline') because task 02 vendored every asset into static/ and
+# banned CDNs outright — nothing here ever needed a third-party script/style origin. Applied in
+# every environment, not just prod: a CSP violation in dev is a bug the same way it is in
+# production, and catching it there is cheaper.
+#
+# templates/500.html carries the one inline <style> block in the whole project, deliberately
+# (its own comment explains why: that page must render even if static-file resolution itself is
+# what broke, so it cannot depend on an external stylesheet). Allowed by exact SHA-256 content
+# hash rather than by adding 'unsafe-inline' to style-src project-wide — the hash allows only
+# that one, unchanging block, not inline styles in general. See
+# config/tests/test_csp.py::test_500_page_style_hash_matches_template, which fails loudly if
+# that template's CSS ever changes without this hash being regenerated to match.
+_500_PAGE_STYLE_HASH = "sha256-pfuGtH2j2r5hQWBs/qJmhL1YYZEbGvJhHt67ZtSQWzs="
+
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": ["'self'"],
+        "script-src": ["'self'"],
+        "style-src": ["'self'", _500_PAGE_STYLE_HASH],
+        "img-src": ["'self'", "data:"],
+        "frame-ancestors": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'self'"],
+    },
 }

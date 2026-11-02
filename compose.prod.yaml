@@ -1,0 +1,159 @@
+# Production Docker Compose stack (10.7, design.md "Deployment" / "Two documented paths").
+# Deliberately a separate, self-contained file rather than an override merged with
+# compose.yaml — `docker compose -f compose.prod.yaml up -d` is the whole production
+# first-boot command (docs/OPERATIONS.md, 10.16), so this file cannot depend on anything
+# compose.yaml alone would supply. It reuses the exact same image, Dockerfile, and
+# docker-entrypoint.sh as compose.yaml — this is the same startup path with production-grade
+# operational settings layered on top, not a second one: resource limits (a runaway request
+# must not be able to take the whole server down), bounded log retention (the bootstrapped
+# admin's one-time temp password is only as secret as this container's log history — see
+# accounts/management/commands/bootstrap_admin.py's own warning), and provenance build args
+# (10.7b) so a deployed image can name the commit it came from.
+#
+# First deployment: cp .env.example .env && make secret (fills in SECRET_KEY), then
+# `make docker-build-prod && docker compose -f compose.prod.yaml up -d`. See
+# docs/OPERATIONS.md for the full production runbook.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Same INCLUDE_POSTGRES switch as compose.yaml — see that file's comment.
+        INCLUDE_POSTGRES: ${INCLUDE_POSTGRES:-false}
+        # 10.7b: which commit and when. `make docker-build-prod` fills these in from `git
+        # rev-parse` / `date` at build time; a bare `docker compose -f compose.prod.yaml
+        # build` with neither set still produces a working image, just one that reports
+        # "unknown" on the admin dashboard instead of naming its commit. Deliberately not
+        # read from `.env` — a value living there could go stale the moment someone forgets
+        # to update it after a new build, silently mislabelling every image after the first.
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Same reasoning as compose.yaml: the named data volume, not the container's writable
+      # layer or BASE_DIR/app.
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/db.sqlite3}
+      CACHE_DIR: ${CACHE_DIR:-/app/data/cache}
+      # 10.15: rotating app.log / error.log on the persistent data volume, not the container's
+      # writable layer — the files survive a `docker compose up` recreate the same way the
+      # database and cache already do.
+      LOG_DIR: ${LOG_DIR:-/app/data/logs}
+    volumes:
+      - plantoplate_data:/app/data
+      - plantoplate_media:/app/media
+    # Bounds how long the bootstrapped admin's one-time temp password (printed once to stdout
+    # by bootstrap_admin, captured by `docker compose logs app`) stays readable, and stops an
+    # unattended long-running deployment from filling the host's disk with json-file log
+    # history — neither is bounded by default (compose.yaml sets no `logging:` at all, so
+    # Docker's own unbounded default applies). 50MB total (5 x 10MB) comfortably outlasts a
+    # single first-boot sequence's worth of migrate/collectstatic/bootstrap_admin/gunicorn
+    # access-log chatter between rotations.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # A runaway request (an unbounded recursive flatten, a pathological import payload) must
+    # not be able to starve the host of the memory/CPU Caddy, SQLite, and everything else on
+    # this box also need. Sized for gunicorn's 2 workers x 4 gthread threads
+    # (gunicorn.conf.py): each worker process plus Django plus the venv comfortably fits well
+    # under 384MB even under load, so 768MB total leaves real headroom without being
+    # effectively unlimited. Tune down further on a smaller box; a container OOM-killed under
+    # this limit restarts cleanly under `restart: unless-stopped` rather than the whole host
+    # swapping to a crawl.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 768M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz/', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      # ,z relabels the file for container access. Without it a SELinux-enforcing host (Fedora)
+      # denies the read and Caddy crash-loops with "permission denied"; harmless elsewhere.
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Caddy itself terminates TLS for the whole household and has no persistent state worth
+    # protecting beyond its ACME account/certs (already on a named volume, unaffected by this
+    # limit) — a much smaller ceiling than the app is appropriate.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+    # Alpine's busybox `wget` (present in this image's base, unlike curl) against Caddy's
+    # admin API — localhost-only by default, never exposed past this container — confirms the
+    # server process is up and answering. This does not gate `app`'s own healthcheck or
+    # anything's `depends_on`; it exists purely so `docker compose ps` / an external monitor
+    # can tell a wedged Caddy process apart from a merely-quiet one.
+    # 127.0.0.1, not localhost: on Alpine "localhost" tries ::1 first, where the admin API
+    # does not listen, so the check failed forever and the container showed as unhealthy.
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Uncomment to switch the database engine — see compose.yaml's identical block for the full
+  # three-step explanation (INCLUDE_POSTGRES, DATABASE_URL, POSTGRES_* in .env).
+  #
+  # postgres:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: ${POSTGRES_DB:-plantoplate}
+  #     POSTGRES_USER: ${POSTGRES_USER:-plantoplate}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+  #   volumes:
+  #     - plantoplate_postgres:/var/lib/postgresql/data
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-plantoplate}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  plantoplate_data:
+  plantoplate_media:
+  caddy_data:
+  caddy_config:
+  # plantoplate_postgres:

@@ -8,6 +8,11 @@
  * there and a bare `writeText()` call throws silently. This falls back to the classic
  * `document.execCommand('copy')`-via-hidden-`<textarea>` path when the modern API is
  * unavailable, and always shows on-page feedback next to the button either way.
+ *
+ * Wired up via a `data-copy-target` attribute rather than an inline `onclick=` (10.4 — Content
+ * Security Policy: `script-src 'self'` rejects an inline handler with no nonce/hash). See
+ * `resolveCopyTarget` below for what the attribute means; `window.ptpCopyToClipboard` is no
+ * longer exposed globally since nothing outside this file calls it any more.
  */
 (function () {
   "use strict";
@@ -58,7 +63,7 @@
   }
 
   /** Copy `text` to the clipboard, feeding back success/failure next to `button`. */
-  window.ptpCopyToClipboard = function (button, text) {
+  function copyToClipboard(button, text) {
     const canUseModernApi =
       window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText;
 
@@ -85,5 +90,38 @@
       succeeded ? "Copied." : "Could not copy automatically — select the text and copy it by hand.",
       !succeeded
     );
-  };
+  }
+
+  /**
+   * Resolves the element whose text a `data-copy-target` button should copy.
+   *
+   * `data-copy-target` is a CSS selector, resolved against the whole document by default
+   * (`create_user.html`'s single, page-unique `#temp-password`). A button additionally
+   * carrying `data-copy-target-closest` instead resolves the selector inside its nearest
+   * matching ancestor — `reset_password_done.html`'s one-button-per-table-row case, where
+   * each row's own `.temp-pw` cell must not be confused with another row's.
+   */
+  function resolveCopyTarget(button) {
+    const selector = button.getAttribute("data-copy-target");
+    if (!selector) {
+      return null;
+    }
+    const closestSelector = button.getAttribute("data-copy-target-closest");
+    if (closestSelector) {
+      const scope = button.closest(closestSelector);
+      return scope ? scope.querySelector(selector) : null;
+    }
+    return document.querySelector(selector);
+  }
+
+  document.addEventListener("click", function (event) {
+    const button = event.target.closest ? event.target.closest("[data-copy-target]") : null;
+    if (!button) {
+      return;
+    }
+    const target = resolveCopyTarget(button);
+    if (target) {
+      copyToClipboard(button, target.textContent);
+    }
+  });
 })();

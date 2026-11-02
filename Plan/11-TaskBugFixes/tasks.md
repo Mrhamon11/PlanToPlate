@@ -385,3 +385,21 @@ need a full design) only when a subtask is actually picked up.
   actually runs, so this gap is a real (if low-probability) blind spot. *Fix:* add a small
   parametrized search smoke test in `config/tests/test_admin.py` covering every registered
   model that declares `search_fields`.
+
+- [ ] **11.35 — Boosted nav removes `#messages` from the page, so later HTMX flash messages have no target**
+  *Found in:* task 10 manual dev-test (Chrome console, `htmx:oobErrorNoTarget, #messages`), 2026-11-01.
+  `templates/_partials/_messages.html`, `templates/base.html:30`, `core/mixins.py` (`MessageMixin`),
+  `planner/views.py` (slot-card response).
+  *Issue:* `_messages.html` always carries `hx-swap-oob="true"`, which the comment calls "inert on
+  the first full page load". It is not inert under the nav's `hx-boost`: htmx lifts the OOB element
+  out of the boosted full-page response, so the swapped-in body has no `#messages`, and every later
+  boosted navigation logs the error. Likely effect (not confirmed in a browser): a flash message
+  raised by an HTMX fragment action after the first nav click is silently dropped. The
+  `_shopping_actions.html` / `_shopping_progress.html` partials use the same "inert on first load"
+  pattern and may share the problem. *Fix:* emit `hx-swap-oob` only for fragment responses (an
+  `oob` context flag passed by `MessageMixin` and `planner/views.py`, absent in `base.html`); add a
+  test that a full-page render has no `hx-swap-oob` on `#messages`, then check the shopping partials.
+
+- [ ] **11.36 — No `/favicon.ico`; every page load logs a 404 in the browser console**
+  *Found in:* task 10 manual dev-test, 2026-11-01. *Issue:* cosmetic. *Fix:* ship a favicon
+  (naturally part of N4 PWA & Polish) and link it from `base.html`.

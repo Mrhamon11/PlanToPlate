@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from catalog.exceptions import IncompatibleUnits
 from catalog.models import Dimension, Unit
@@ -105,6 +105,7 @@ def flatten(
     *,
     factor: Decimal = ONE,
     exclude_staples: bool = False,
+    viewer: Any | None = None,
 ) -> list[FlatLine]:
     """Expand ``recipe`` into a flat list of ``FlatLine``, one per ingredient occurrence,
     every quantity scaled by ``factor`` (and, for a sub-recipe, by its yield factor).
@@ -112,6 +113,18 @@ def flatten(
     Not aggregated — a flat recipe returns its own components unchanged. Call ``aggregate`` on
     the result to merge same-ingredient lines. Raises ``CycleError`` / ``DepthExceededError``
     on a malformed graph and ``FlattenError`` on an unscalable sub-recipe.
+
+    ``viewer``, if given, is defence-in-depth (10.1 carried finding from the task-05 review):
+    any ingredient or sub-recipe not ``visible_to`` ``viewer`` is silently dropped from the
+    result — the same graceful degradation ``RecipeSerializer`` already applies to a single
+    component (recipes/serializers.py, "degrades to the bare name"). The sharing cascade
+    (``core/services/sharing.py``) is supposed to guarantee that everything reachable through a
+    recipe visible to ``viewer`` is itself visible to them, so this should never actually
+    trigger — it exists only so a bug in that cascade cannot turn ``flatten``'s full aggregated
+    ingredient list (quantities, names, and every sub-recipe's own name via ``from_recipes``)
+    into a bigger leak than the serializer's. Omitted (the default), this check does not run —
+    every existing caller that already trusts its own visibility gate (the shopping list, the
+    planner) is unaffected.
 
     If ``recipe`` already carries the full component graph (it came from
     ``Recipe.objects.with_component_graph()``), that prefetch is reused as-is; otherwise the
@@ -133,6 +146,7 @@ def flatten(
         id_path=(prefetched.pk,),
         depth=0,
         exclude_staples=exclude_staples,
+        viewer=viewer,
         out=lines,
     )
     return lines
@@ -154,12 +168,15 @@ def _flatten_into(
     id_path: tuple[object, ...],
     depth: int,
     exclude_staples: bool,
+    viewer: Any | None,
     out: list[FlatLine],
 ) -> None:
     for component in recipe.components.all():
         if component.ingredient_id:
             ingredient = component.ingredient
             if exclude_staples and ingredient.is_staple:
+                continue
+            if viewer is not None and not _is_visible(ingredient, viewer):
                 continue
             out.append(
                 FlatLine(
@@ -178,6 +195,8 @@ def _flatten_into(
             continue
 
         sub_recipe = component.sub_recipe
+        if viewer is not None and not _is_visible(sub_recipe, viewer):
+            continue
         if sub_recipe.pk in id_path:
             raise CycleError([*name_path, sub_recipe.name])
         if depth + 1 > MAX_DEPTH:
@@ -191,8 +210,13 @@ def _flatten_into(
             id_path=(*id_path, sub_recipe.pk),
             depth=depth + 1,
             exclude_staples=exclude_staples,
+            viewer=viewer,
             out=out,
         )
+
+
+def _is_visible(instance: Any, viewer: Any) -> bool:
+    return type(instance).objects.visible_to(viewer).filter(pk=instance.pk).exists()
 
 
 def _sub_recipe_factor(component: RecipeComponent, sub_recipe: Recipe) -> Decimal:

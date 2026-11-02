@@ -1,0 +1,24 @@
+[Unit]
+# Runs deploy/backup.sh once (10.11 / 10.12). Paired with backup.timer, which is what actually
+# schedules it -- `systemctl start backup.service` on its own runs a single backup on demand
+# (e.g. right after first deploy, per docs/OPERATIONS.md's "run the first backup and
+# immediately test-restore it"). Not enabled directly; enable the timer.
+Description=PlanToPlate database backup
+
+[Service]
+Type=oneshot
+User=plantoplate
+Group=plantoplate
+WorkingDirectory=/opt/plantoplate
+EnvironmentFile=/etc/plantoplate/plantoplate.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
+Environment=DATA_DIR=/var/lib/plantoplate
+Environment=PATH=/opt/plantoplate/.venv/bin:/usr/bin:/bin
+ExecStart=/opt/plantoplate/deploy/backup.sh
+
+# Cheap insurance against a runaway pipeline (a huge dumpdata export, a stuck off-box sync)
+# eating the whole box -- a backup job is background maintenance, never worth starving the
+# actual app of resources over.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

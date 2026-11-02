@@ -50,6 +50,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.13-slim-bookworm@sha256:00faa2debb87529f9f0764e9491d8ba400a3678976616c3bd7cb193745ac20d1 AS runtime
 
+# Build provenance (10.7b, design.md "Image reproducibility and provenance"): "which commit is
+# this actually running" is the first question when something is wrong in production, and
+# unanswerable without this. A LABEL alone would only answer it from outside the container
+# (`docker inspect`); promoting both build args to ENV as well means the running Django
+# process can read them straight out of os.environ and surface them on the admin dashboard
+# (config/admin.py's build_info()). Left unset, both default to "unknown" — an honest label
+# for a build that did not pass them, never a fabricated-looking value that could be mistaken
+# for a real commit. compose.prod.yaml's `make docker-build-prod` target is what actually
+# supplies them; a bare `docker build .` with no --build-arg still produces a working image,
+# just one that cannot name its own commit.
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
+
 # Pillow's usual runtime dependencies. Installed here — the runtime stage — not just the
 # builder, or the image builds fine and then fails the first time someone uploads an image.
 # Pillow itself is not a dependency yet (it lands in task N1); these libraries are cheap to
@@ -80,7 +95,9 @@ RUN mkdir -p /app/staticfiles /app/data /app/media \
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    DJANGO_SETTINGS_MODULE=config.settings.prod
+    DJANGO_SETTINGS_MODULE=config.settings.prod \
+    GIT_SHA=${GIT_SHA} \
+    BUILD_DATE=${BUILD_DATE}
 
 USER app
 

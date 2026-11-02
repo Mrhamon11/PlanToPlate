@@ -299,7 +299,7 @@ class IngredientQuickAddView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        ingredient = Ingredient.objects.filter(owner=request.user, name__iexact=name).first()
+        ingredient = Ingredient.objects.editable_by(request.user).filter(name__iexact=name).first()
         created = False
         if ingredient is None:
             ingredient = Ingredient.objects.create(

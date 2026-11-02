@@ -82,7 +82,17 @@ class Command(BaseCommand):
 
         existing = user_model.objects.filter(username=username).first()
         if existing is not None and not force:
-            raise CommandError(self._refusal_message(username, existing))
+            # returncode=2 (Django >=4.1) distinguishes this specific, recoverable refusal from
+            # every other CommandError this command can raise (invalid --username, the
+            # IntegrityError backstop) — both of which keep the default returncode=1. Only
+            # ``call_command`` sees the exception itself in tests; a real process invocation
+            # (docker-entrypoint.sh, running this exactly as ``manage.py bootstrap_admin`` with
+            # no arguments on every first boot) sees the exit code, and specifically tolerates
+            # this one rather than crash-looping the whole container on a database-only
+            # restore, a Postgres switch, or a marker deleted by hand — recoverable only by an
+            # operator running ``--force``, never by retrying the same unattended command
+            # (RECOVERABLE_REFUSAL_EXIT_CODE, 10.7).
+            raise CommandError(self._refusal_message(username, existing), returncode=2)
 
         if existing is None:
             self._create(user_model(username=username, is_staff=True, is_superuser=True))

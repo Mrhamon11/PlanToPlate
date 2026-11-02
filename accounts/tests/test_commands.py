@@ -53,8 +53,14 @@ def test_bootstrap_admin_reports_username_clash(user_factory):
     """
     user_factory(username="admin", is_staff=False, is_superuser=False)
 
-    with pytest.raises(CommandError, match="already taken by a non-admin account"):
+    with pytest.raises(CommandError, match="already taken by a non-admin account") as excinfo:
         call_command("bootstrap_admin", stdout=io.StringIO())
+
+    # 10.7: docker-entrypoint.sh distinguishes this specific, operator-recoverable refusal
+    # from every other failure this command can raise by its process exit code alone — losing
+    # returncode=2 here would turn a database-only restore or a deleted first-run marker back
+    # into a container crash-loop under `restart: unless-stopped`.
+    assert excinfo.value.returncode == 2
 
 
 def test_bootstrap_admin_rejects_empty_username():

@@ -3,6 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% comment %}
+    htmx otherwise injects its own inline <style> for .htmx-indicator, which the strict
+    style-src blocks. static/css/components.css already defines those rules.
+    {% endcomment %}
+    <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
     <title>{% block title %}PlanToPlate{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/reset.css' %}">
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
@@ -30,6 +35,7 @@ csrf processor to every template render regardless of the TEMPLATES OPTIONS list
     <script src="{% static 'js/htmx.min.js' %}"></script>
     <script src="{% static 'js/alpine.min.js' %}" defer></script>
     <script src="{% static 'js/menus.js' %}" defer></script>
+    <script src="{% static 'js/auto-submit.js' %}" defer></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -202,7 +202,9 @@ def flatten_dish(
     Task 05's sub-recipe yield scaling still applies underneath — ``flatten_recipe`` handles
     it — so a component's ``servings`` multiplies on top of whatever the sub-recipe graph
     already resolves to. A component whose recipe is not visible to ``viewer`` is skipped
-    entirely, graph and all.
+    entirely, graph and all. ``viewer`` is also forwarded into ``flatten_recipe`` itself
+    (10.1 carried finding) so a sub-recipe or ingredient the cascade should have — but, on a
+    bug, did not — made visible is dropped rather than leaked through the aggregated result.
     """
     lines: list[FlatLine] = []
     for component in visible_components(dish, viewer):
@@ -211,6 +213,7 @@ def flatten_dish(
                 component.recipe,
                 factor=component.servings,
                 exclude_staples=exclude_staples,
+                viewer=viewer,
             )
         )
     return aggregate(lines)

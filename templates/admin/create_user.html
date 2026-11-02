@@ -13,8 +13,7 @@
     <p><strong>Temporary password — shown once, right now. It will not be shown again.</strong></p>
     <p>
       <code id="temp-password">{{ temp_password }}</code>
-      <button type="button" class="button"
-              onclick="ptpCopyToClipboard(this, document.getElementById('temp-password').textContent)">
+      <button type="button" class="button" data-copy-target="#temp-password">
         Copy
       </button>
       <span class="copy-feedback" aria-live="polite"></span>

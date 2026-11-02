@@ -20,7 +20,8 @@ the recipient (design.md, "Edge cases"), collaborative editing is out of scope.
 from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -93,7 +94,11 @@ class ListViewSet(OwnedViewSetMixin, viewsets.ModelViewSet):
             ListItemSerializer(item, context=self._item_context([item])).data, status=201
         )
 
-    @extend_schema(request=ListItemSerializer, responses={200: ListItemSerializer})
+    @extend_schema(
+        request=ListItemSerializer,
+        responses={200: ListItemSerializer},
+        parameters=[OpenApiParameter("item_id", OpenApiTypes.INT, OpenApiParameter.PATH)],
+    )
     @action(
         detail=True,
         methods=["patch", "delete"],

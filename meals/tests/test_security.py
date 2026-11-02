@@ -201,6 +201,34 @@ def test_dish_flattened_does_not_expand_invisible_recipe(alice, carol, cup, gram
     assert {row["ingredient"]["name"] for row in response.data} == {"Tomato"}
 
 
+def test_dish_flattened_does_not_expand_invisible_nested_ingredient(
+    alice, carol, cup, gram, make_ingredient
+):
+    """Defence in depth one level deeper than the test above (10.1 carried finding): even when
+    the component *recipe* is itself visible (shared), an ingredient inside it that is somehow
+    not visible must not leak through the dish's aggregated ``/flattened/`` list either.
+    """
+    dish = Dish.objects.create(name="Carol Dinner", owner=alice, visibility="SHARED")
+    dish.shared_with.add(carol)
+    shared_recipe = _recipe(alice, cup, "Alice Shared Stew", visibility="SHARED")
+    shared_recipe.shared_with.add(carol)
+    visible_ing = make_ingredient("Carrot", owner=alice, visibility="SHARED")
+    visible_ing.shared_with.add(carol)
+    secret_ing = make_ingredient("Secret Spice", owner=alice, visibility="PRIVATE")
+    RecipeComponent.objects.create(
+        recipe=shared_recipe, ingredient=visible_ing, quantity=Decimal("100"), unit=gram
+    )
+    RecipeComponent.objects.create(
+        recipe=shared_recipe, ingredient=secret_ing, quantity=Decimal("5"), unit=gram
+    )
+    DishComponent.objects.create(dish=dish, recipe=shared_recipe, servings=Decimal("1"))
+
+    response = _client(carol).get(f"/api/dishes/{dish.pk}/flattened/")
+
+    assert response.status_code == 200
+    assert {row["ingredient"]["name"] for row in response.data} == {"Carrot"}
+
+
 # --- per-user stats are private ------------------------------------------------------
 
 

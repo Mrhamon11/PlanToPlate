@@ -63,8 +63,7 @@ Context:
                   hx-target="#{{ cell.card_id }}" hx-swap="outerHTML" class="slot-card-swap">
                 {% csrf_token %}
                 <label class="visually-hidden" for="{{ cell.card_id }}-swap">Swap in a dish for {{ cell.slot_label }}, day {{ cell.day_index|add:1 }}</label>
-                <select id="{{ cell.card_id }}-swap" name="dish"
-                        onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+                <select id="{{ cell.card_id }}-swap" name="dish" data-auto-submit>
                     <option value="">Swap / clear…</option>
                     {% if entry.dish %}<option value="">— clear this slot —</option>{% endif %}
                     {% for dish in my_dishes %}

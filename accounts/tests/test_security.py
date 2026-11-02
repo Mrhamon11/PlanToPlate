@@ -18,6 +18,7 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.api import LoginAPIView
 from accounts.forms import TempPasswordAwareAuthenticationForm
+from accounts.middleware import ForcePasswordChangeMiddleware
 from accounts.throttling import LOGIN_THROTTLE_SCOPE, _LoginThrottleTarget
 from accounts.views import TempPasswordAwareLoginView, ThrottledLoginMixin
 from conftest import DEFAULT_TEST_PASSWORD
@@ -223,14 +224,18 @@ def test_throttle_survives_x_forwarded_for_rotation_when_num_proxies_configured(
     the *entire* client-supplied ``X-Forwarded-For`` header — rotating it on every request
     bypassed the throttle completely (20 wrong-password POSTs, zero 429, measured live in
     review). ``config/settings/prod.py`` sets ``NUM_PROXIES = 1`` so DRF instead trusts only
-    the single hop Caddy itself appends (the last comma-separated entry), which a client cannot
-    forge away. Simulated here with ``override_settings`` rather than importing ``prod.py``
-    wholesale, since this test only needs to pin the throttling *mechanism*, not prod's full
-    settings surface (that surface is covered separately in ``config/tests/test_settings.py``).
+    the single rightmost comma-separated entry, which a client cannot forge away. Simulated
+    here with ``override_settings`` rather than importing ``prod.py`` wholesale, since this
+    test only needs to pin the throttling *mechanism*, not prod's full settings surface (that
+    surface is covered separately in ``config/tests/test_settings.py``).
 
-    The trailing hop is held constant across every request — exactly what Caddy's own append
-    behaviour produces for a fixed real client — while the attacker-controlled prefix rotates;
-    NUM_PROXIES=1 must still throttle on the sixth attempt.
+    The trailing hop is held constant across every request — the shape an *appending* proxy
+    chain (a ``trusted_proxies`` Caddy configuration, or a different reverse proxy entirely;
+    Caddy's own default in this deployment already replaces the header outright rather than
+    appending to it — see the Caddyfile and ``config/settings/prod.py``'s own comments) would
+    produce for a fixed real client — while the attacker-controlled prefix rotates;
+    NUM_PROXIES=1 must still throttle on the sixth attempt regardless of which shape produced
+    the header.
     """
     settings.REST_FRAMEWORK = {**settings.REST_FRAMEWORK, "NUM_PROXIES": 1}
     user = user_factory()
@@ -359,6 +364,146 @@ def test_throttled_response_states_wait_and_no_lockout(client, user_factory):
     )
 
 
+def test_admin_login_throttled_response_has_retry_after(client, user_factory):
+    """10.1/10.5 carried finding from task 01: only the HTML login view's 429 was ever pinned
+    for ``Retry-After`` (the test above) — deleting the ``wait``/``Retry-After`` block in
+    ``check_login_throttle`` left the whole suite green for the *other* Django-rendered 429,
+    ``/admin/login/``'s. Both paths return the exact same ``HttpResponse`` object from
+    ``check_login_throttle`` unmodified, so this mirrors the assertions above one level down.
+    """
+    user_factory(username="admin", is_staff=True, is_superuser=True)
+
+    for _ in range(5):
+        response = client.post("/admin/login/", {"username": "admin", "password": "wrong"})
+        assert response.status_code == 200
+
+    throttled_response = client.post("/admin/login/", {"username": "admin", "password": "wrong"})
+
+    assert throttled_response.status_code == 429
+    assert "Retry-After" in throttled_response
+    assert int(throttled_response["Retry-After"]) > 0
+
+
+def test_login_throttle_keyed_by_ip_not_by_authenticated_user(client, user_factory):
+    """10.5 carried finding from 01.8: ``ScopedRateThrottle.get_cache_key`` keys on
+    ``request.user.pk`` whenever the request is authenticated, so an attacker who already holds
+    (or freely creates) one valid account gets a *second* full 5/min budget from the same IP —
+    against a completely different target account — simply by being logged in as themselves
+    when they submit it. ``LoginRateThrottle`` must key on IP unconditionally instead.
+
+    Reproduced directly: exhaust the anonymous budget from this IP, then prove a request that
+    additionally carries a valid session (a second, already-authenticated user logged in from
+    the same client) is throttled identically rather than drawing a fresh budget.
+    """
+    target = user_factory(username="target")
+    already_authenticated = user_factory(username="bystander")
+
+    for _ in range(5):
+        response = client.post(
+            reverse("accounts:login"), {"username": target.username, "password": "wrong"}
+        )
+        assert response.status_code == 200
+
+    # Log in as a second, unrelated account on this same client/IP without spending a slot
+    # (the reset-on-success fix, pinned separately below) -- this simulates the exact attack
+    # shape: attacker already holds a real session when they submit the next guess.
+    client.force_login(already_authenticated)
+
+    still_throttled = client.post(
+        reverse("accounts:login"), {"username": target.username, "password": "wrong"}
+    )
+
+    assert still_throttled.status_code == 429
+
+
+def test_successful_login_resets_the_throttle_bucket(client, user_factory):
+    """10.5 carried finding from 01.8: a successful login must not keep spending down the
+    shared IP budget, or a household behind one NAT address can throttle a legitimate login
+    purely on volume, with no wrong password anywhere in the mix. Four wrong guesses (still
+    under the 5/min cap) followed by one correct login must leave the bucket empty again — a
+    fifth wrong guess right after must not be the one that trips 429.
+    """
+    user = user_factory()
+
+    for _ in range(4):
+        response = client.post(
+            reverse("accounts:login"), {"username": user.username, "password": "wrong"}
+        )
+        assert response.status_code == 200
+
+    correct_login = client.post(
+        reverse("accounts:login"),
+        {"username": user.username, "password": DEFAULT_TEST_PASSWORD},
+    )
+    assert correct_login.status_code == 302
+    assert get_user(client).is_authenticated
+
+    client.logout()
+    for _ in range(4):
+        response = client.post(
+            reverse("accounts:login"), {"username": user.username, "password": "wrong"}
+        )
+        assert response.status_code == 200
+
+
+def test_authenticated_session_attacking_another_account_still_gets_throttled(client, user_factory):
+    """Blocking finding, task 10 review: ``ThrottledLoginMixin.post`` used to reset the shared
+    bucket whenever ``request.user.is_authenticated`` was ``True`` *after* ``super().post()``
+    returned -- which reflects the pre-existing session, not whether this POST's credentials
+    were valid. Neither ``TempPasswordAwareLoginView`` nor Django's own ``LoginView`` redirects
+    an already-authenticated caller away (``redirect_authenticated_user`` defaults to ``False``
+    and neither view sets it), so a caller already logged in as any account could submit wrong
+    credentials for a *different* target account in a loop with zero throttling: every attempt
+    was recorded into the bucket and then immediately wiped, because the caller stayed
+    authenticated as themselves throughout. Reproduced live pre-fix: 10 consecutive wrong-
+    password POSTs from a session already authenticated as an unrelated account, zero 429s.
+    """
+    target = user_factory(username="target")
+    attacker = user_factory(username="attacker")
+    client.force_login(attacker)
+
+    for _ in range(5):
+        response = client.post(
+            reverse("accounts:login"),
+            {"username": target.username, "password": "wrong-password"},
+        )
+        assert response.status_code == 200
+
+    sixth_response = client.post(
+        reverse("accounts:login"),
+        {"username": target.username, "password": "wrong-password"},
+    )
+
+    assert sixth_response.status_code == 429
+
+
+def test_authenticated_session_attacking_another_account_via_admin_login_still_throttled(
+    client, user_factory
+):
+    """Same blocking finding as the test above, for ``throttled_admin_login``'s near-identical
+    reset logic. ``AdminSite.login`` only special-cases an already-authenticated caller on a
+    *GET* with admin permission (``has_permission``) -- a POST always runs the form, so a
+    non-staff attacker holding any session hits the exact same bug here.
+    """
+    target = user_factory(username="target", is_staff=True, is_superuser=True)
+    attacker = user_factory(username="attacker")
+    client.force_login(attacker)
+
+    for _ in range(5):
+        response = client.post(
+            "/admin/login/",
+            {"username": target.username, "password": "wrong-password"},
+        )
+        assert response.status_code == 200
+
+    sixth_response = client.post(
+        "/admin/login/",
+        {"username": target.username, "password": "wrong-password"},
+    )
+
+    assert sixth_response.status_code == 429
+
+
 def test_throttle_does_not_lock_the_account(client, user_factory):
     """Design.md is explicit: the throttle slows an attacker down, it must never lock the
     account out. Once the window has elapsed, the real password still works — simulated here
@@ -427,6 +572,39 @@ def _login_form_hash_operation_count(username: str, password: str) -> int:
         form.is_valid()
 
     return count
+
+
+def test_force_password_change_exemption_is_exact_not_a_prefix_match(user_factory, client):
+    """10.1 carried finding from task 01: ``ForcePasswordChangeMiddleware._is_exempt`` must
+    match the exempt ``/api/auth/...`` paths *exactly*, never by prefix — design.md is explicit
+    that a prefix match would also exempt ``/api/auth/me/``, letting a user stuck on a temp
+    password read (or, on another endpoint, act on) account data without changing it first.
+
+    Loosening ``_is_exempt`` to a prefix match leaves the *whole suite* green today, because
+    ``ForcePasswordChangeAPIPermission`` independently blocks the same requests at the DRF
+    permission layer (defence in depth) — nothing before this asserted the middleware's own
+    exemption boundary directly.
+    """
+    assert ForcePasswordChangeMiddleware._is_exempt("/api/auth/me/") is False
+    # Non-vacuous: the real exemptions this same method must still allow.
+    assert ForcePasswordChangeMiddleware._is_exempt("/api/auth/password/change/") is True
+    assert ForcePasswordChangeMiddleware._is_exempt("/api/auth/logout/") is True
+
+
+def test_admin_login_get_renders_form(client):
+    """10.1 carried finding from task 01: ``throttled_admin_login`` only special-cases
+    ``POST`` (see ``accounts.views``); a regression that made it swallow every method — e.g.
+    returning an empty 200 without ever calling ``admin.site.login`` for a plain ``GET`` — would
+    leave the rest of the suite green, since every other admin-login test here only ever POSTs.
+    A real login page, with a real form, must still render for a bare visit.
+    """
+    response = client.get("/admin/login/")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "<form" in content
+    assert 'name="username"' in content
+    assert 'name="password"' in content
 
 
 def test_wrong_password_and_nonexistent_user_perform_the_same_hash_operation_count(

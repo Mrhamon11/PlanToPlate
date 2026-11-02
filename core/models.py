@@ -60,7 +60,12 @@ class OwnedModel(models.Model):
         related_name="shared_%(class)ss",
     )
     is_system = models.BooleanField(default=False, db_index=True)
-    notes = models.TextField(blank=True)
+    #: Bounded (10.2 input-validation sweep): an unbounded ``TextField`` inherited by every
+    #: owned object is a cheap denial-of-service — nothing previously stopped a single ``notes``
+    #: write from being gigabytes. 20,000 characters is generous for a genuine free-text note on
+    #: a recipe/dish/list/plan and far below anything that could strain SQLite or a rendered
+    #: page.
+    notes = models.TextField(blank=True, max_length=20_000)
     copied_from = models.ForeignKey(
         "self",
         null=True,

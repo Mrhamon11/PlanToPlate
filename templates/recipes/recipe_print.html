@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ recipe.name }} — PlanToPlate</title>
     <link rel="stylesheet" href="{% static 'css/print.css' %}">
+    <script src="{% static 'js/print-trigger.js' %}" defer></script>
 </head>
 <body>
     <div class="print-toolbar">
         <a href="{% url 'recipes:recipe-detail' recipe.pk %}">&larr; Back to recipe</a>
-        <button type="button" onclick="window.print()">Print</button>
+        <button type="button" data-print-trigger>Print</button>
     </div>
 
     <article class="print-recipe">

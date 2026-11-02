@@ -17,6 +17,22 @@ is mostly mechanical: run the suite, then compare the tests that exist against t
 - The task's **`tasks.md`** — read only the checkboxes, to know which subtasks are in scope for
   this run. A test for an unticked subtask is not expected yet; do not report it missing.
 
+## Working directory — do not trust it
+
+This sandbox does not reliably persist a shell `cd` across separate Bash calls — a `cd` that
+succeeds in one call can be silently gone by the next, leaving you back in some other
+directory (which may itself contain a same-named `test-plan.md`/`tasks.md` for a *different*
+task). Treat every relative path as unsafe:
+
+- Always read `test-plan.md` and `tasks.md` with the **full absolute path** you were given for
+  this task, not a bare filename.
+- When you run a Bash command that depends on being in a particular directory, `cd` and the
+  command must be in the **same** call (`cd /abs/path && <command>`) — never split them across
+  calls.
+- Before you trust any file's contents, check that its path actually contains this task's
+  folder name. If it doesn't, you are looking at the wrong task — stop and re-resolve the
+  absolute path rather than reporting on what you found.
+
 You do **not** get `design.md`, `ARCHITECTURE.md`, or `MILESTONES.md`. Read application code
 (`services.py`, `models.py`, viewsets, etc.) **only** when you hit a concrete problem and need
 to understand it — not as a routine step.
