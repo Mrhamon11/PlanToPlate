@@ -134,4 +134,4 @@ could only close half of these and what running the rest for real requires).
 - [x] Off-box backup copy confirmed working. *(Verified to a local directory; a real remote is on the homelab first-deploy checklist in `Plan/BACKLOG.md`.)*
 - [x] `docs/OPERATIONS.md` covers every procedure in the design.
 - [x] All 14 manual verifications performed and reported. *(Check 4 was a Docker daemon restart, not a host reboot; also on the homelab checklist.)*
-- [ ] Subtasks ticked; `../MILESTONES.md` updated and **the MVP marked complete**. *(Subtasks ticked and row updated to AWAITING APPROVAL; the owner flips it to COMPLETE on merge.)*
+- [x] Subtasks ticked; `../MILESTONES.md` updated and **the MVP marked complete**.
