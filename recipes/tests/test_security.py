@@ -183,6 +183,27 @@ def test_shared_recipe_hides_invisible_component(alice, carol, cup, gram, make_i
     assert "density_g_per_ml" not in component
 
 
+def test_flattened_endpoint_hides_invisible_component(alice, carol, cup, gram, make_ingredient):
+    """Same defence-in-depth as ``test_shared_recipe_hides_invisible_component`` above, applied
+    to ``/flattened/``'s full aggregated ingredient list rather than the plain detail view
+    (10.1 carried finding from the task-05 review — ``flatten`` leaks *more* than the
+    serializer in this scenario: the full nested ingredient list, not just a bare name).
+    """
+    recipe = _recipe(alice, cup, name="Leaky", visibility="SHARED")
+    recipe.shared_with.add(carol)
+    secret = make_ingredient(
+        "Alice Private Spice", owner=alice, visibility="PRIVATE", notes="secret blend"
+    )
+    RecipeComponent.objects.create(
+        recipe=recipe, ingredient=secret, quantity=Decimal("1"), unit=gram
+    )
+
+    response = _client(carol).get(f"/api/recipes/{recipe.pk}/flattened/")
+
+    assert response.status_code == 200
+    assert "Alice Private Spice" not in {row["ingredient"]["name"] for row in response.data}
+
+
 # --- typeahead pickers: never leak an invisible name, never offer a cycle -------------
 
 

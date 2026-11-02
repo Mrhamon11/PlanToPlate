@@ -1,0 +1,23 @@
+# Opt-in override for a deployment whose SITE_ADDRESS is a Tailscale name (*.ts.net).
+#
+#   docker compose -f compose.prod.yaml -f compose.tailscale.yaml up -d
+#
+# For any *.ts.net name Caddy asks the host's tailscaled for the certificate, over its unix
+# socket, and falls back to Let's Encrypt (which cannot work for a private name) if it cannot.
+# Requires "HTTPS Certificates" to be enabled for the tailnet in the Tailscale admin console.
+#
+# Not part of compose.prod.yaml: a deployment on SITE_ADDRESS=localhost or a public domain does
+# not need it, and bind-mounting a socket that does not exist makes Docker create a directory
+# there instead.
+#
+# label=disable: on a SELinux-enforcing host (Fedora) the container's confined type may not
+# connect to tailscaled's socket ("permission denied" in Caddy's log). Disabling label
+# confinement for the Caddy container is what was verified to work; it is a real relaxation, so
+# a narrower policy is preferable if you write one.
+
+services:
+  caddy:
+    security_opt:
+      - label=disable
+    volumes:
+      - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock

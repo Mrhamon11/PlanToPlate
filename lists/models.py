@@ -14,6 +14,9 @@ lines, and never a *second* plan's items (design.md, "``source`` and ``generated
 
 from __future__ import annotations
 
+from decimal import Decimal
+
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 
@@ -119,7 +122,17 @@ class ListItem(models.Model):
         Ingredient, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
 
-    quantity = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    #: ``>= 0``, not ``> 0`` — unlike a recipe component, a checked-but-not-yet-quantified line
+    #: (or a deliberate "0 left to buy") is a real state ``lists.services.update_item`` already
+    #: allows. The model-level bound (10.2 input-validation sweep) closes any write path that
+    #: bypasses that service, matching the negative-rejection rule it documents.
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
     unit = models.ForeignKey(Unit, on_delete=models.PROTECT, null=True, blank=True)
 
     source = models.CharField(

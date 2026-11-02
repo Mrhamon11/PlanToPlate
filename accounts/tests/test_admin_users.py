@@ -115,6 +115,10 @@ def test_create_user_copy_button_has_clipboard_fallback(admin_client):
     deployment. The Copy button must route through the feature-detecting helper (with an
     ``execCommand`` fallback) rather than calling the modern API directly, and the page must
     load that script and offer an on-page feedback slot.
+
+    The button is wired via a ``data-copy-target`` attribute rather than an inline
+    ``onclick=ptpCopyToClipboard(...)`` (10.4, Content Security Policy — no ``script-src
+    'unsafe-inline'``); ``admin-copy.js`` itself now owns the click-to-copy wiring.
     """
     response = admin_client.post(
         _create_url(), {"username": "copyfallback", "email": "", "first_name": "", "last_name": ""}
@@ -122,7 +126,8 @@ def test_create_user_copy_button_has_clipboard_fallback(admin_client):
     body = response.content.decode()
 
     assert "js/admin-copy.js" in body
-    assert "ptpCopyToClipboard(" in body
+    assert 'data-copy-target="#temp-password"' in body
+    assert "onclick=" not in body
     assert "navigator.clipboard.writeText(" not in body
     assert 'class="copy-feedback"' in body
 
@@ -217,13 +222,16 @@ def test_reset_invalidates_sessions(admin_client, user_factory, client):
 
 def test_reset_password_copy_button_has_clipboard_fallback(admin_client, user_factory):
     """09 dev-test finding 3 (reset-password results page — same regression as the create-user
-    page's Copy button)."""
+    page's Copy button). See ``test_create_user_copy_button_has_clipboard_fallback`` above for
+    why this checks ``data-copy-target`` rather than an inline ``onclick=`` (10.4).
+    """
     target = user_factory(username="resetcopyfallback")
     response = _changelist_action(admin_client, "reset_temp_password", [target.pk])
     body = response.content.decode()
 
     assert "js/admin-copy.js" in body
-    assert "ptpCopyToClipboard(" in body
+    assert 'data-copy-target=".temp-pw"' in body
+    assert "onclick=" not in body
     assert "navigator.clipboard.writeText(" not in body
     assert 'class="copy-feedback"' in body
 

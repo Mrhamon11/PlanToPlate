@@ -1,0 +1,18 @@
+[Unit]
+# Hourly schedule for backup.service (10.11) -- backup.sh itself decides, on each run, whether
+# to also promote today's/this week's backup into the daily/weekly tiers and prune expired
+# ones (hourly kept 24h, daily 30d, weekly 1yr; see design.md "Backups"), so one hourly timer
+# is all the scheduling this needs -- there is no separate daily/weekly timer to keep in sync.
+Description=Hourly PlanToPlate database backup
+
+[Timer]
+OnCalendar=hourly
+# Spreads the actual run up to 5 minutes past the hour, so a fleet of these (not that this
+# project expects one, but it costs nothing) doesn't all hit disk/network at :00:00 together.
+RandomizedDelaySec=300
+# Catches up a missed run (the box was off at the scheduled time) the next time it boots,
+# rather than silently waiting for the next hourly mark.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

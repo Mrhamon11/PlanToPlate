@@ -23,7 +23,7 @@ failure (a planned dish unshared since save) only `error` is set — surfaced in
         <label>
             <input type="checkbox" name="exclude_staples" value="true"
                    {% if exclude_staples %}checked{% endif %}
-                   onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+                   data-auto-submit>
             Leave out pantry staples
         </label>
         <noscript><button type="submit" class="btn btn-small">Update</button></noscript>

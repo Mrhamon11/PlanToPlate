@@ -33,6 +33,20 @@ def validate_positive_yield(value: object) -> None:
         )
 
 
+def validate_positive_quantity(value: object) -> None:
+    """A component's quantity must be greater than zero (10.2 input-validation sweep — the
+    ``recipes.services.components``/``RecipeSerializer`` write paths already reject this, but
+    the model-level bound closes any path that writes a ``RecipeComponent`` directly, e.g. the
+    admin or a future importer branch, matching every other quantity-like field's own
+    validator).
+    """
+    if value is not None and value <= 0:
+        raise ValidationError(
+            "A component's quantity must be greater than zero.",
+            code="non_positive_quantity",
+        )
+
+
 def _existing_copy_for(node: OwnedModel, actor) -> OwnedModel | None:
     """The copy of ``node`` that ``actor`` already owns, if any — so a second copy operation
     reuses it instead of trying (and, for ``Ingredient``, failing) to create a duplicate.
@@ -93,8 +107,12 @@ class Recipe(OwnedModel):
     """
 
     name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    instructions = models.TextField()
+    #: Bounded (10.2 input-validation sweep) — see ``core.models.OwnedModel.notes``'s comment
+    #: for why an unbounded ``TextField`` on a user-writable model is a cheap DoS.
+    #: ``instructions`` gets a higher cap than ``description``: a real multi-step recipe with a
+    #: dozen sub-recipes can run long, but neither needs to be unbounded.
+    description = models.TextField(blank=True, max_length=5_000)
+    instructions = models.TextField(max_length=50_000)
     yield_quantity = models.DecimalField(
         max_digits=10,
         decimal_places=3,
@@ -222,7 +240,9 @@ class RecipeComponent(models.Model):
         blank=True,
         related_name="used_in",
     )
-    quantity = models.DecimalField(max_digits=10, decimal_places=3)
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=3, validators=[validate_positive_quantity]
+    )
     unit = models.ForeignKey(Unit, on_delete=models.PROTECT, related_name="recipe_components")
     position = models.PositiveIntegerField(default=0)
     note = models.CharField(max_length=200, blank=True)

@@ -4,6 +4,12 @@ A self-hosted recipe, meal-planning and shopping-list app for a household of 10�
 built with Django and DRF. See [`Plan/ARCHITECTURE.md`](Plan/ARCHITECTURE.md) for the
 architecture and decision log, and [`Plan/MILESTONES.md`](Plan/MILESTONES.md) for task status.
 
+**Deploying for real?** This README covers first *local* deployment via the dev-oriented
+`compose.yaml`. For a production deployment — hardened settings, TLS on a real domain,
+backups, restores, rotating `SECRET_KEY`, moving to a VPS, and everything else that matters
+once this holds real data — see [`docs/OPERATIONS.md`](docs/OPERATIONS.md), starting with its
+"Production first deployment" section.
+
 ## First deployment (Docker Compose)
 
 This is the whole setup. Nothing here needs a step that isn't written down.
@@ -107,6 +113,9 @@ Caddy provisions TLS automatically. `SITE_ADDRESS` in `.env` controls how:
 - Left unset (default: `localhost`) — Caddy issues a certificate from its own internal CA.
   Browsers and `curl` will warn it's untrusted (`curl -k` to bypass); this is expected and
   fine for a home LAN reached over Tailscale.
+- Set to a Tailscale name (`*.ts.net`) — Caddy uses a real Let's Encrypt certificate from
+  `tailscaled`. Enable HTTPS Certificates for the tailnet and start with
+  `-f compose.prod.yaml -f compose.tailscale.yaml` (see `docs/OPERATIONS.md`).
 - Set to a real, publicly resolvable domain — Caddy requests a publicly trusted certificate
   from Let's Encrypt automatically. Make sure `ALLOWED_HOSTS` in `.env` includes that domain,
   and that ports 80/443 are reachable from the internet for the ACME challenge. You do not

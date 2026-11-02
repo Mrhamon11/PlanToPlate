@@ -266,10 +266,12 @@ class MealPlanSerializer(OwnedSerializer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
-        if request is not None:
-            self.fields["shopping_list"].queryset = List.objects.filter(
-                owner=getattr(request, "user", None)
-            )
+        user = getattr(request, "user", None)
+        # See GeneratePreviewSerializer.__init__'s comment: filter(owner=AnonymousUser())
+        # raises rather than matching nothing, so an anonymous/fake-schema-generation caller
+        # is left with the field's .none() default instead of a real owner filter.
+        if getattr(user, "is_authenticated", False):
+            self.fields["shopping_list"].queryset = List.objects.filter(owner=user)
 
     @extend_schema_field(serializers.DictField())
     def get_profile_snapshot(self, obj: MealPlan) -> dict:
@@ -360,10 +362,14 @@ class GeneratePreviewSerializer(serializers.Serializer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
-        if request is not None:
-            self.fields["profile"].queryset = MealPlanProfile.objects.filter(
-                owner=getattr(request, "user", None)
-            )
+        user = getattr(request, "user", None)
+        # An anonymous request.user (a real unauthenticated caller, blocked upstream by
+        # IsAuthenticated in production; or drf-spectacular's fake schema-generation request)
+        # is not a MealPlanProfile owner. filter(owner=AnonymousUser()) raises -- Django can't
+        # resolve it to a primary key -- so this leaves the field's queryset at its .none()
+        # default instead, exactly the right answer for "this caller owns no profiles."
+        if getattr(user, "is_authenticated", False):
+            self.fields["profile"].queryset = MealPlanProfile.objects.filter(owner=user)
 
 
 class PersistPlanSerializer(GeneratePreviewSerializer):

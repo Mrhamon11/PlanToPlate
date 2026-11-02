@@ -38,7 +38,8 @@ class Dish(OwnedModel):
     """A collection of recipes that make one complete meal (glossary)."""
 
     name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
+    #: Bounded (10.2 input-validation sweep) — see ``core.models.OwnedModel.notes``'s comment.
+    description = models.TextField(blank=True, max_length=5_000)
     tags = models.ManyToManyField(Tag, blank=True, related_name="dishes")
 
     objects = DishManager()
@@ -198,7 +199,8 @@ class RecipeBook(OwnedModel):
     """
 
     name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
+    #: Bounded (10.2 input-validation sweep) — see ``core.models.OwnedModel.notes``'s comment.
+    description = models.TextField(blank=True, max_length=5_000)
     #: The book's preferred sort for its recipe grid — a view-level choice, stored so it
     #: persists between visits (``design.md``: "stored as the book's ``default_ordering``
     #: preference"). ``MANUAL`` honours ``RecipeBookEntry.position``.

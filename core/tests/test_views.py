@@ -71,7 +71,7 @@ def test_healthz_rejects_post(client):
 
 
 def test_healthz_reachable_by_compose_healthcheck_under_real_domain_allowed_hosts(
-    client, monkeypatch
+    client, monkeypatch, tmp_path
 ):
     """Regression guard for the ALLOWED_HOSTS / healthcheck trap (BLOCKING 5).
 
@@ -88,6 +88,11 @@ def test_healthz_reachable_by_compose_healthcheck_under_real_domain_allowed_host
     on prod.py at all and so would not catch that regression.
     """
     monkeypatch.setenv("ALLOWED_HOSTS", "plantoplate.example.com")
+    # 10.15: config.settings.prod's LOGGING creates its rotating-file-handler directory eagerly
+    # at import time (correctness requirement — a missing log directory must never crash a
+    # running deployment the first time something logs). Left at its BASE_DIR-relative default,
+    # this import would leave a real `logs/` directory at the repo root on every test run.
+    monkeypatch.setenv("LOG_DIR", str(tmp_path / "logs"))
     sys.modules.pop("config.settings.prod", None)
     try:
         prod_settings = importlib.import_module("config.settings.prod")

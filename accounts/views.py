@@ -16,7 +16,13 @@ from django.views.generic import TemplateView
 
 from accounts.forms import TempPasswordAwareAuthenticationForm
 from accounts.services import complete_password_change
-from accounts.throttling import check_login_throttle
+from accounts.throttling import (
+    PASSWORD_CHANGE_THROTTLE_RATE,
+    PASSWORD_CHANGE_THROTTLE_SCOPE,
+    check_login_throttle,
+    reset_login_throttle,
+)
+from core.services.ratelimit import check_rate_limit
 
 
 class ThrottledLoginMixin:
@@ -40,7 +46,22 @@ class ThrottledLoginMixin:
         throttled = check_login_throttle(request)
         if throttled is not None:
             return throttled
-        return super().post(request, *args, **kwargs)
+        # Captured before super().post() runs the form: request.user.is_authenticated
+        # afterward reflects whatever session was already attached to the request, not whether
+        # *this* POST's credentials were valid. Resetting on that post-hoc, cause-agnostic check
+        # let anyone already holding any authenticated session submit wrong credentials for a
+        # different target account in a loop with zero throttling — every attempt recorded into
+        # the shared bucket was wiped again immediately after, because the caller was (and
+        # remained) logged in as themselves throughout (task 10 review, blocking finding). Only
+        # a login that flips this request's own session from anonymous to authenticated counts
+        # as this request having performed the successful authentication.
+        was_authenticated_before = request.user.is_authenticated
+        response = super().post(request, *args, **kwargs)
+        if not was_authenticated_before and request.user.is_authenticated:
+            # 10.5 carried finding: a successful login must not keep spending the shared IP
+            # budget — see accounts.throttling.reset_login_throttle.
+            reset_login_throttle(request)
+        return response
 
 
 def throttled_admin_login(request: HttpRequest, *args, **kwargs) -> HttpResponse:
@@ -62,7 +83,18 @@ def throttled_admin_login(request: HttpRequest, *args, **kwargs) -> HttpResponse
         throttled = check_login_throttle(request)
         if throttled is not None:
             return throttled
-    return admin.site.login(request, *args, **kwargs)
+    # Same fix and same reasoning as ThrottledLoginMixin.post above: captured before
+    # admin.site.login() runs, so the reset below only fires when *this* POST is what
+    # authenticated the session, never merely because the caller was already logged in as
+    # someone else when they submitted a wrong password for a different target account.
+    was_authenticated_before = request.user.is_authenticated
+    response = admin.site.login(request, *args, **kwargs)
+    if request.method == "POST" and not was_authenticated_before and request.user.is_authenticated:
+        # django.contrib.auth.login() (called inside admin.site.login() on success) sets
+        # request.user directly, so this is reachable right after the call returns — see
+        # accounts.throttling.reset_login_throttle.
+        reset_login_throttle(request)
+    return response
 
 
 class TempPasswordAwareLoginView(ThrottledLoginMixin, LoginView):
@@ -96,6 +128,22 @@ class ForcedAwarePasswordChangeView(PasswordChangeView):
         context = super().get_context_data(**kwargs)
         context["forced"] = self.request.user.must_change_password
         return context
+
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        """10.5: password change is throttled the same as login (5/min), sharing one bucket
+        with ``accounts.api.PasswordChangeAPIView`` (see ``accounts.throttling``'s constants).
+        Keyed on the requester's own primary key — unlike login, the caller here already holds
+        a real session, so there is no "which account is attacking which" ambiguity to worry
+        about.
+        """
+        throttled = check_rate_limit(
+            request,
+            scope=PASSWORD_CHANGE_THROTTLE_SCOPE,
+            rate=PASSWORD_CHANGE_THROTTLE_RATE,
+        )
+        if throttled is not None:
+            return throttled
+        return super().post(request, *args, **kwargs)
 
 
 class ProfileView(LoginRequiredMixin, TemplateView):

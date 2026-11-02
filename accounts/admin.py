@@ -36,6 +36,11 @@ from django.urls import path, reverse
 from accounts import services
 from accounts.models import User
 from core.services import audit
+from core.services.ratelimit import (
+    ADMIN_ACTION_THROTTLE_RATE,
+    ADMIN_ACTION_THROTTLE_SCOPE,
+    check_rate_limit,
+)
 
 
 class UserCreationAdminForm(forms.ModelForm):
@@ -177,6 +182,11 @@ class UserAdmin(DjangoUserAdmin):
         temp_password = None
         created_user = None
         if request.method == "POST":
+            throttled = check_rate_limit(
+                request, scope=ADMIN_ACTION_THROTTLE_SCOPE, rate=ADMIN_ACTION_THROTTLE_RATE
+            )
+            if throttled is not None:
+                return throttled
             form = UserCreationAdminForm(request.POST)
             if form.is_valid():
                 data = form.cleaned_data
@@ -215,6 +225,11 @@ class UserAdmin(DjangoUserAdmin):
 
     @admin.action(description="Reset password (new temp password, end all sessions)")
     def reset_temp_password(self, request: HttpRequest, queryset) -> HttpResponse:
+        throttled = check_rate_limit(
+            request, scope=ADMIN_ACTION_THROTTLE_SCOPE, rate=ADMIN_ACTION_THROTTLE_RATE
+        )
+        if throttled is not None:
+            return throttled
         results = [
             (user, services.reset_password(actor=request.user, user=user)) for user in queryset
         ]
@@ -229,7 +244,12 @@ class UserAdmin(DjangoUserAdmin):
     # -- 09.8 entitlement ----------------------------------------------------------------
 
     @admin.action(description="Grant admin access (is_staff)")
-    def grant_admin(self, request: HttpRequest, queryset) -> None:
+    def grant_admin(self, request: HttpRequest, queryset) -> HttpResponse | None:
+        throttled = check_rate_limit(
+            request, scope=ADMIN_ACTION_THROTTLE_SCOPE, rate=ADMIN_ACTION_THROTTLE_RATE
+        )
+        if throttled is not None:
+            return throttled
         changed = sum(
             services.set_entitlement(actor=request.user, user=user, is_staff=True)
             for user in queryset
@@ -239,7 +259,12 @@ class UserAdmin(DjangoUserAdmin):
         )
 
     @admin.action(description="Revoke admin access (is_staff)")
-    def revoke_admin(self, request: HttpRequest, queryset) -> None:
+    def revoke_admin(self, request: HttpRequest, queryset) -> HttpResponse | None:
+        throttled = check_rate_limit(
+            request, scope=ADMIN_ACTION_THROTTLE_SCOPE, rate=ADMIN_ACTION_THROTTLE_RATE
+        )
+        if throttled is not None:
+            return throttled
         try:
             with transaction.atomic():
                 changed = sum(

@@ -40,6 +40,7 @@ from core.services.importer import (
     ImportValidationError,
     run_import,
 )
+from core.services.ratelimit import IMPORT_THROTTLE_RATE, IMPORT_THROTTLE_SCOPE, check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,11 @@ def import_json_view(request: HttpRequest, admin_site: admin.AdminSite) -> HttpR
     report = None
     problems = None
     if request.method == "POST":
+        throttled = check_rate_limit(
+            request, scope=IMPORT_THROTTLE_SCOPE, rate=IMPORT_THROTTLE_RATE
+        )
+        if throttled is not None:
+            return throttled
         form = ImportJSONForm(request.POST, request.FILES)
         if form.is_valid():
             raw = form.cleaned_data["file"].read()

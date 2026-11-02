@@ -23,7 +23,8 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import ProtectedError, QuerySet
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
@@ -161,7 +162,10 @@ class RecipeBookViewSet(OwnedViewSetMixin, viewsets.ModelViewSet):
         )
         return Response(RecipeBookEntrySerializer(entry).data, status=201)
 
-    @extend_schema(responses={204: None})
+    @extend_schema(
+        responses={204: None},
+        parameters=[OpenApiParameter("recipe_id", OpenApiTypes.INT, OpenApiParameter.PATH)],
+    )
     @action(detail=True, methods=["delete"], url_path=r"recipes/(?P<recipe_id>[^/.]+)")
     def remove_recipe(
         self, request: Request, pk: str | None = None, recipe_id: str | None = None

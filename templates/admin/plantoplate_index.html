@@ -15,6 +15,12 @@ them out.
     ({{ dashboard.active_user_count }} active, {{ dashboard.staff_count }} admin).
   </p>
 
+  <h3>Build</h3>
+  <p>
+    Commit: <strong>{{ dashboard.build.git_sha }}</strong>
+    &nbsp;·&nbsp; Built: <strong>{{ dashboard.build.build_date }}</strong>
+  </p>
+
   <h3>Database</h3>
   {% if dashboard.database %}
     <p>

@@ -15,11 +15,17 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from accounts.serializers import LoginSerializer, PasswordChangeSerializer, UserSerializer
-from accounts.throttling import LOGIN_THROTTLE_SCOPE
+from accounts.throttling import (
+    LOGIN_THROTTLE_SCOPE,
+    PASSWORD_CHANGE_THROTTLE_RATE,
+    PASSWORD_CHANGE_THROTTLE_SCOPE,
+    LoginRateThrottle,
+    reset_login_throttle,
+)
+from core.services.ratelimit import check_rate_limit
 
 
 @method_decorator(sensitive_post_parameters(), name="dispatch")
@@ -39,16 +45,19 @@ class LoginAPIView(APIView):
     case.
 
     Throttled at ``5/min`` (``throttle_scope = "login"``, rate set in
-    ``REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]``), keyed on IP by ``ScopedRateThrottle`` since
-    an anonymous login POST has no authenticated user to key on — see design.md, "Login
-    throttling". Shares the same cache key/scope as the HTML login view's throttle
+    ``REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]``), keyed on IP **unconditionally** by
+    ``LoginRateThrottle`` — never on ``request.user.pk`` even if this request happens to carry
+    an existing authenticated session (10.5 carried finding, see that class's docstring). Shares
+    the same cache key/scope as the HTML login view's throttle
     (``accounts.views.ThrottledLoginMixin``) and ``/admin/login/``
     (``accounts.views.throttled_admin_login``), so an attacker cannot triple their attempt
-    budget by splitting attempts across all three endpoints.
+    budget by splitting attempts across all three endpoints. A successful login resets the
+    bucket (``reset_login_throttle``) so it never keeps charging a household behind one NAT
+    address for logins that actually succeeded.
     """
 
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [LoginRateThrottle]
     throttle_scope = LOGIN_THROTTLE_SCOPE
 
     @extend_schema(request=LoginSerializer, responses=UserSerializer)
@@ -56,6 +65,7 @@ class LoginAPIView(APIView):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         auth_login(request, serializer.validated_data["user"])
+        reset_login_throttle(request)
         return Response(UserSerializer(request.user).data)
 
 
@@ -88,8 +98,30 @@ class MeAPIView(APIView):
 
 @method_decorator(sensitive_post_parameters(), name="dispatch")
 class PasswordChangeAPIView(APIView):
+    """10.5: throttled at ``5/min``, sharing one real bucket with the HTML password-change view
+    (``accounts.views.ForcedAwarePasswordChangeView``) via
+    ``core.services.ratelimit.check_rate_limit`` — the *same* algorithm on both surfaces, not
+    just the same cache key. This view used to run DRF's own ``ScopedRateThrottle`` against that
+    key instead, which corrupted the shared bucket: ``ScopedRateThrottle`` requires the cached
+    history list to stay sorted newest-first (it prunes by popping the tail) while
+    ``check_rate_limit`` appends the newest entry at the tail, so once both sides had written to
+    the key, DRF's prune could stop at a not-yet-expired tail entry and never reach genuinely
+    stale entries further in, producing false 429s (10 review, task 10 blocking finding).
+    Calling ``check_rate_limit`` directly here, exactly as the HTML view already does, keeps one
+    self-consistent algorithm on both sides of the shared bucket. Keyed on the requester's own
+    primary key (``check_rate_limit``'s default ``ident``): unlike login, every caller here
+    already holds a real session, so there is no benefit to an attacker in switching accounts.
+    """
+
     @extend_schema(request=PasswordChangeSerializer, responses={204: None})
     def post(self, request: Request) -> Response:
+        throttled = check_rate_limit(
+            request._request,
+            scope=PASSWORD_CHANGE_THROTTLE_SCOPE,
+            rate=PASSWORD_CHANGE_THROTTLE_RATE,
+        )
+        if throttled is not None:
+            return throttled
         serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()

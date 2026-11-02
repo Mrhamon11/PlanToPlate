@@ -22,9 +22,15 @@ implementation was done in a separate `/p2p-task-dev` session.
 
 ## Dispatch
 
-Dispatch **one** `p2p-tester` agent. Give it the resolved task folder path and nothing else —
-it reads `test-plan.md` and the `tasks.md` checkboxes itself, and reads application code only
-if it hits a concrete problem. It gets one pass at fixing a broken test before handing back.
+Dispatch **one** `p2p-tester` agent. Give it the resolved task folder as an **absolute path**
+(resolve it with `pwd` if needed — never hand it a bare relative folder name) and nothing
+else — it reads `test-plan.md` and the `tasks.md` checkboxes itself, and reads application
+code only if it hits a concrete problem. It gets one pass at fixing a broken test before
+handing back.
+
+This sandbox does not reliably persist a shell `cd` across separate Bash calls — a relative
+path can silently resolve against the wrong directory later in the run. Passing an absolute
+path up front is what keeps the tester on the right task.
 
 Wait for it to finish.
 

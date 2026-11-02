@@ -781,9 +781,11 @@ class RecipeAddToBookView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, recipe_pk: int) -> HttpResponse:
         recipe = get_object_or_404(Recipe.objects.visible_to(request.user), pk=recipe_pk)
-        book = RecipeBook.objects.filter(
-            pk=_parse_int(request.POST.get("book")), owner=request.user
-        ).first()
+        book = (
+            RecipeBook.objects.editable_by(request.user)
+            .filter(pk=_parse_int(request.POST.get("book")))
+            .first()
+        )
         back = reverse("recipes:recipe-detail", args=[recipe.pk])
         if book is None:
             messages.error(request, "Pick one of your books.")

@@ -1,17 +1,47 @@
-# {$SITE_ADDRESS} defaults to "localhost" (see compose.yaml). Caddy's automatic HTTPS
-# recognizes that "localhost" cannot get a public certificate and issues one from its own
-# internal CA instead — no extra directive needed. Point SITE_ADDRESS at a real domain in
-# .env for a publicly trusted Let's Encrypt certificate; nothing else in this file changes.
+# {$SITE_ADDRESS} defaults to "localhost" (see compose.yaml / compose.prod.yaml). Caddy's
+# automatic HTTPS recognizes that "localhost" cannot get a public certificate and issues one
+# from its own internal CA instead — no extra directive needed. Point SITE_ADDRESS at a real
+# domain in .env for a publicly trusted Let's Encrypt certificate; nothing else in this file
+# changes.
 {$SITE_ADDRESS:localhost} {
 	encode gzip
 
+	# Active health checking (10.8, design.md "Caddy" — "Health check pointed at /healthz/
+	# from task 00"): Caddy polls the upstream itself and stops routing traffic to it the
+	# moment /healthz/ fails, rather than forwarding every request to a Django process that is
+	# up but reporting unhealthy (e.g. its database connection is down) and waiting for a
+	# client to notice the 5xx. Independent of Compose's own container-level healthcheck
+	# (compose.yaml / compose.prod.yaml), which gates `depends_on: condition: service_healthy`
+	# at *startup* — this one matters for the whole time the process is running.
 	reverse_proxy app:8000 {
-		# Overwrites X-Forwarded-For with the real peer address instead of Caddy's default
-		# of appending to whatever the client already sent — a client-supplied header would
-		# otherwise let an attacker defeat the login throttle's IP-based key by rotating
-		# this header on every request (config/settings/prod.py's NUM_PROXIES=1 is
-		# belt-and-braces against the same attack; this directive removes the
-		# attacker-controlled entry entirely rather than relying on DRF to skip past it).
+		health_uri /healthz/
+		# Without this the probe's Host is the upstream address (app:8000), which Django's
+		# ALLOWED_HOSTS rejects with a 400 - Caddy would then mark the app permanently down.
+		health_headers {
+			Host {$SITE_ADDRESS:localhost}
+		}
+		health_interval 30s
+		health_timeout 5s
+
+		# Caddy's reverse_proxy already REPLACES (not appends to) whatever X-Forwarded-For a
+		# client sent, by default, whenever `trusted_proxies` is unset — verified at runtime
+		# against the pinned caddy:2.10.2-alpine image: a request carrying a spoofed
+		# X-Forwarded-For arrives upstream with that header rewritten to contain only the real
+		# peer address, identical to what the line below produces. This directive is therefore
+		# currently redundant (byte-identical upstream headers with or without it) — kept as
+		# explicit, checked-by-test documentation of the property config/settings/prod.py's
+		# NUM_PROXIES=1 depends on, not the thing enforcing it.
+		#
+		# Do NOT read "currently redundant" as license to add `trusted_proxies` (e.g. to front
+		# this with Cloudflare or another LB) without also revisiting this line first:
+		# trusted_proxies switches Caddy to *appending* the real peer onto an already-present,
+		# now-trusted chain instead of replacing it outright, and at that point this directive
+		# becomes actively harmful — it would overwrite the real client's address with Caddy's
+		# own immediate peer (the load balancer's IP, not the client's), collapsing every
+		# distinct client behind that balancer into config/settings/prod.py's one throttle
+		# bucket. Remove this line (or make its argument proxy-chain-aware) before adding
+		# trusted_proxies, and retune NUM_PROXIES to match the new hop count.
+		#
 		# header_up is a reverse_proxy subdirective: at site-block level Caddy rejects the
 		# whole file as an unrecognized directive and the container crash-loops.
 		header_up X-Forwarded-For {remote_host}

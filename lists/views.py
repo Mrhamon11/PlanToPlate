@@ -527,7 +527,9 @@ class AddToListView(LoginRequiredMixin, View):
 
         raw = (request.POST.get("list") or "").strip()
         pk = int(raw) if raw.isdigit() else None
-        lst = List.objects.filter(pk=pk, owner=request.user).first() if pk is not None else None
+        lst = (
+            List.objects.editable_by(request.user).filter(pk=pk).first() if pk is not None else None
+        )
         if lst is None:
             messages.error(request, "Pick one of your lists.")
             return redirect(back)

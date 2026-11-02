@@ -20,6 +20,7 @@ every ``@admin.register`` decorator and ``admin.site.urls`` — transparently us
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from django.contrib.admin import AdminSite
@@ -74,6 +75,21 @@ def database_file_sizes(connection=None) -> dict | None:
         "database_human": _human_bytes(db_bytes),
         "wal_human": _human_bytes(wal_bytes),
         "path": str(db_path),
+    }
+
+
+def build_info() -> dict[str, str]:
+    """Which commit and build this running process actually came from (10.7b).
+
+    ``GIT_SHA`` / ``BUILD_DATE`` are baked into the image as both a Docker ``LABEL`` (readable
+    from outside via ``docker inspect``) and an ``ENV`` (readable from inside, which is what
+    this function reads) — see the Dockerfile's runtime stage. Outside Docker (``uv run
+    manage.py runserver``, the test suite) neither is set, so both default to a value that
+    reads as "not a real build" rather than an empty string a template would render as blank.
+    """
+    return {
+        "git_sha": os.environ.get("GIT_SHA", "unknown"),
+        "build_date": os.environ.get("BUILD_DATE", "unknown"),
     }
 
 
@@ -156,6 +172,7 @@ class PlanToPlateAdminSite(AdminSite):
                 ]
             ),
             "database": database_file_sizes(),
+            "build": build_info(),
             "quick_links": [
                 {"label": "Create a user", "url": reverse("admin:accounts_user_create")},
                 {"label": "Import JSON", "url": reverse("admin:core_import_json")},

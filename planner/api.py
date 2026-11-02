@@ -30,7 +30,8 @@ import random
 
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed, PermissionDenied, ValidationError
@@ -73,8 +74,21 @@ class MealPlanProfileViewSet(viewsets.ModelViewSet):
     serializer_class = MealPlanProfileSerializer
 
     def get_queryset(self) -> QuerySet[MealPlanProfile]:
+        """A profile is private to its owner (no visibility model — see module docstring).
+
+        Guards against an unauthenticated ``request.user`` (``AnonymousUser``) the same way
+        ``core.managers.OwnedQuerySet.visible_to`` does elsewhere: a bare ``filter(owner=user)``
+        with an ``AnonymousUser`` raises, rather than returning an empty queryset, because
+        Django cannot resolve it to a primary key for the FK comparison. In production
+        ``IsAuthenticated`` already blocks an anonymous request from reaching here; this also
+        keeps drf-spectacular's schema generation (which probes every viewset with a fake,
+        anonymous request) from raising on this endpoint.
+        """
+        user = self.request.user
+        if not getattr(user, "is_authenticated", False):
+            return MealPlanProfile.objects.none()
         return (
-            MealPlanProfile.objects.filter(owner=self.request.user)
+            MealPlanProfile.objects.filter(owner=user)
             .prefetch_related("excluded_tags", "excluded_ingredients")
             .order_by("name")
         )
@@ -164,7 +178,11 @@ class MealPlanViewSet(OwnedViewSetMixin, viewsets.ModelViewSet):
 
     # --- one entry: swap / lock / clear -------------------------------------------------
 
-    @extend_schema(request=MealPlanEntrySerializer, responses={200: MealPlanEntrySerializer})
+    @extend_schema(
+        request=MealPlanEntrySerializer,
+        responses={200: MealPlanEntrySerializer},
+        parameters=[OpenApiParameter("entry_id", OpenApiTypes.INT, OpenApiParameter.PATH)],
+    )
     @action(
         detail=True,
         methods=["patch"],
@@ -182,7 +200,11 @@ class MealPlanViewSet(OwnedViewSetMixin, viewsets.ModelViewSet):
         serializer.save()
         return Response(MealPlanEntrySerializer(entry, context=self.get_serializer_context()).data)
 
-    @extend_schema(request=RerollEntrySerializer, responses={200: MealPlanEntrySerializer})
+    @extend_schema(
+        request=RerollEntrySerializer,
+        responses={200: MealPlanEntrySerializer},
+        parameters=[OpenApiParameter("entry_id", OpenApiTypes.INT, OpenApiParameter.PATH)],
+    )
     @action(
         detail=True,
         methods=["post"],

@@ -1,0 +1,55 @@
+[Unit]
+# PlanToPlate application server (10.10, ../../Plan/10-Security-And-Deployment/design.md
+# "Two documented paths" — systemd, for a bare VPS that does not want Docker). See
+# ../../docs/OPERATIONS.md for the full install walkthrough this file is one piece of.
+#
+# ExecStart runs the SAME docker-entrypoint.sh the Docker Compose path uses (D6/D7's "do not
+# fork a second startup path" applies here too): migrate + collectstatic on every start
+# (idempotent), the first-run commands (seed_catalog, bootstrap_admin) guarded by their own
+# on-disk marker under DATA_DIR, then `exec gunicorn --config gunicorn.conf.py` -- the script's
+# own final `exec` replaces the shell's process image, so systemd's PID tracking (Type=simple)
+# sees gunicorn directly, not a wrapper shell it has to reach through.
+Description=PlanToPlate application server (gunicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=plantoplate
+Group=plantoplate
+WorkingDirectory=/opt/plantoplate
+
+# Everything docker-entrypoint.sh and manage.py need that isn't baked into the Dockerfile's
+# ENV has to be supplied here instead -- see docs/OPERATIONS.md for how to populate
+# /etc/plantoplate/plantoplate.env (the same values .env holds for the Docker path).
+EnvironmentFile=/etc/plantoplate/plantoplate.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+# A bare VPS has no named Docker volume -- this is the persistent-data equivalent: the SQLite
+# database, its WAL/SHM siblings, backups/, and the first-run command markers all live here.
+# Must exist and be owned by the plantoplate user before the first start (docs/OPERATIONS.md).
+Environment=DATA_DIR=/var/lib/plantoplate
+# The venv's own bin/ first, so `python`/`gunicorn` resolve to it rather than any system
+# interpreter -- mirrors the Dockerfile's `ENV PATH="/app/.venv/bin:${PATH}"`.
+Environment=PATH=/opt/plantoplate/.venv/bin:/usr/bin:/bin
+
+ExecStart=/opt/plantoplate/docker-entrypoint.sh
+
+Restart=on-failure
+RestartSec=5
+# gunicorn.conf.py's graceful_timeout is 30s -- give systemd a few seconds of slack beyond
+# that before it escalates to SIGKILL, the same reasoning `docker compose stop`'s own timeout
+# follows.
+TimeoutStopSec=35
+KillMode=mixed
+
+# Defence in depth, cheap on a dedicated service account: this process has no business writing
+# anywhere but DATA_DIR (the database + backups) and the repo's own staticfiles/ (collectstatic
+# regenerates it on every start, like the container's ephemeral layer).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/plantoplate /opt/plantoplate/staticfiles
+
+[Install]
+WantedBy=multi-user.target

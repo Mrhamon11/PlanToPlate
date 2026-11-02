@@ -125,6 +125,12 @@ class RecipeViewSet(OwnedViewSetMixin, viewsets.ModelViewSet):
     @extend_schema(responses={200: RecipeComponentSerializer(many=True)})
     @action(detail=True, methods=["get"])
     def scaled(self, request: Request, pk: str | None = None) -> Response:
+        # No `viewer=` visibility filter here, unlike `flattened` below — intentional, not an
+        # oversight (10.1 carried finding named both actions). `scale()` is single-level, not
+        # recursive, and `RecipeComponentSerializer` already degrades an invisible component to
+        # its bare `ingredient_name` / `sub_recipe_name`, the same exposure every recipe read
+        # already accepts (`RecipeSerializer.components`) — not the fuller aggregated leak a
+        # recursive walk like `flatten()` produces.
         recipe = self.get_object()
         factor = _parse_factor(request.query_params.get("factor"))
         components = scale(recipe, factor)
@@ -143,7 +149,14 @@ class RecipeViewSet(OwnedViewSetMixin, viewsets.ModelViewSet):
         factor = _parse_factor(request.query_params.get("factor"))
         exclude_staples = _is_true(request.query_params.get("exclude_staples"))
         try:
-            lines = aggregate(flatten(recipe, factor=factor, exclude_staples=exclude_staples))
+            lines = aggregate(
+                flatten(
+                    recipe,
+                    factor=factor,
+                    exclude_staples=exclude_staples,
+                    viewer=request.user,
+                )
+            )
         except (GraphError, FlattenError) as exc:
             raise ValidationError({"detail": str(exc)}) from exc
         return Response(FlatLineSerializer(lines, many=True).data)

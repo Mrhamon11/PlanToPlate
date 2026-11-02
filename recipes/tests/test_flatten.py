@@ -373,6 +373,61 @@ def test_flatten_reuses_caller_prefetch(
     assert len(lines) == 2
 
 
+# --- viewer: defence-in-depth for a sharing-cascade bug (10.1 carried finding) --------
+
+
+def test_flatten_without_viewer_does_not_filter_visibility(
+    make_recipe, make_ingredient, gram, add_ingredient, alice
+):
+    """``viewer`` is opt-in. Every existing internal caller (the shopping list, the planner)
+    omits it and must see unfiltered behaviour — the same as before this parameter existed.
+    """
+    recipe = make_recipe(name="Recipe", owner=alice)
+    secret = make_ingredient("Secret", owner=alice, visibility="PRIVATE")
+    add_ingredient(recipe, secret, 5, gram, position=0)
+
+    lines = flatten(recipe)
+
+    assert {line.ingredient.name for line in lines} == {"Secret"}
+
+
+def test_flatten_viewer_drops_invisible_ingredient(
+    make_recipe, make_ingredient, gram, add_ingredient, alice, bob
+):
+    """Simulates a sharing-cascade bug: ``recipe`` is visible to ``bob`` but one of its
+    ingredients somehow is not. ``flatten`` must drop that line rather than leak it, exactly
+    as ``RecipeSerializer`` degrades a single invisible component to its bare name.
+    """
+    recipe = make_recipe(name="Shared Stew", owner=alice, visibility="SHARED")
+    recipe.shared_with.add(bob)
+    visible_ing = make_ingredient("Carrot", owner=alice, visibility="SHARED")
+    visible_ing.shared_with.add(bob)
+    secret_ing = make_ingredient("Secret Spice", owner=alice, visibility="PRIVATE")
+    add_ingredient(recipe, visible_ing, 100, gram, position=0)
+    add_ingredient(recipe, secret_ing, 5, gram, position=1)
+
+    lines = flatten(recipe, viewer=bob)
+
+    assert {line.ingredient.name for line in lines} == {"Carrot"}
+
+
+def test_flatten_viewer_drops_invisible_sub_recipe_and_its_whole_subtree(
+    make_recipe, make_ingredient, gram, cup, add_sub_recipe, add_ingredient, alice, bob
+):
+    """Same defence, one level deeper: the sub-recipe itself is invisible, so its entire
+    ingredient subtree must never reach the caller, not just the sub-recipe's own name.
+    """
+    parent = make_recipe(name="Parent", owner=alice, visibility="SHARED")
+    parent.shared_with.add(bob)
+    secret_sub = make_recipe(name="Secret Sauce", owner=alice, visibility="PRIVATE")
+    add_ingredient(secret_sub, make_ingredient("Truffle", owner=alice), 10, gram, position=0)
+    add_sub_recipe(parent, secret_sub, 1, cup, position=0)
+
+    lines = flatten(parent, viewer=bob)
+
+    assert lines == []
+
+
 def test_aggregate_merges_provenance():
     class _Unit:
         pk = 1

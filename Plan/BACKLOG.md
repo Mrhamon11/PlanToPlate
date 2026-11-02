@@ -267,6 +267,42 @@ planned task. Each line: what, where it came from, why it is not urgent.
   so the cost is one wasteful request per re-roll. Related to `tasks.md` 12.13 (N5, unlinked
   panel names). When more panels get in-place refresh, build only the requested panel.
 
+## Recipes — follow-ups
+
+- **`recipes/services/flatten.py`'s `_is_visible` issues one query per component instead of
+  batching.** (Task 10 review, 2026-09-17.) The `viewer`-based visibility defence-in-depth
+  check (10.1's carried finding from task 05) does a
+  `.visible_to(viewer).filter(pk=...).exists()` per ingredient/sub-recipe component, unlike
+  `meals.services.dishes.visible_components`'s established pattern (one `pk__in=...` query
+  building a set, checked in memory). Every real call site is bounded to a single dish/recipe's
+  own graph (depth-capped at 5) — never the whole-week shopping-list path, which reasons about
+  visibility once, batched, up front — so the practical impact is small at this project's
+  scale. It does make the "bounded number of queries" doc comment at
+  `recipes/api.py:104-109` inaccurate whenever `viewer` is passed. Batch it (collect
+  visible-id sets once per top-level `flatten()` call) the next time this file is touched, and
+  correct or caveat that doc comment in the meantime.
+
+## Deployment / CI — follow-ups
+
+- **No CI runs the Docker-gated Caddyfile validity check.** (Task 10.6–10.10 dev run,
+  2026-09-17.) `config/tests/test_caddyfile.py`'s container-backed `caddy validate` test skips
+  silently whenever Docker is absent or the pinned image isn't cached locally, and there is no
+  CI pipeline in this project at all — so a real syntax error introduced into `Caddyfile`
+  today would pass the whole suite on any machine without Docker, with no red anywhere. No
+  task currently owns "set up CI." Fix needs two things: a CI workflow (even a minimal
+  GitHub Actions job running `uv run pytest` with Docker available), and/or making that one
+  test fail loudly instead of skipping when Docker is unavailable rather than silently passing.
+
+  Related gap found in the same review pass: no automated test exercises
+  `docker-entrypoint.sh`'s `run_first_run_command_if_present` rc-handling logic itself
+  (capturing `rc`, deciding whether to write the marker, whether to `exit` on other codes) —
+  only the Python-side `CommandError(returncode=2)` is pinned
+  (`accounts/tests/test_commands.py::test_bootstrap_admin_reports_username_clash`). This shell
+  logic previously had exactly this class of bug (the pre-10.7 crash-loop) and there is no
+  shell-test infrastructure in this project (no bats, no CI) to catch a regression. When CI /
+  shell-test tooling is added for the item above, add a script-level test that stubs
+  `manage.py` to exit 2 and asserts no marker is written and the script still execs gunicorn.
+
 ## New features — need their own task folder
 
 - **Pantry / on-hand list type.** (Task 08 manual dev-test, 2026-09-07 — owner request.)
@@ -349,3 +385,44 @@ planned task. Each line: what, where it came from, why it is not urgent.
   task 12. Harmless at 10–20 users; fix by resolving visible dishes once page-wide and
   threading the cache through the serializer context. Best folded into any future
   planner-serializer rework.
+
+- **Deployment-script hardening from the task 10 live-rehearsal review (2026-11-01).**
+  **Items (1)-(6) fixed the same day** (staging-dir guard, `deploy/tests/test_docker_backup.py`,
+  `umask 077`, `flock`, `.env` read by the script, `.env.example` note). Only (7) remains open, as an
+  optional future tightening.
+  **Test-hardening left over from the task 10 tester pass:** make the two missing-tool tests
+  hermetic (they skip when rclone is installed, and the `rsync`-missing branch of `backup.sh` has
+  no test); `test_backup_uses_sqlite_backup_not_cp` is only a literal-string tripwire;
+  `docker-backup.sh`'s `flock` guard and `.env` parser (quoted values, duplicate keys) are
+  untested.
+  (1) `deploy/docker-backup.sh` runs `rm -rf "$STAGING_DIR"` with an unguarded, env-overridable
+  path (`STAGING_DIR=/` or `.` or `$HOME` would be catastrophic) - refuse empty/`/`/`.`/`$HOME`
+  or require the dir to carry a marker file. (2) It has no test (deploy/tests covers only
+  backup.sh and restore-test.sh); add a stub-`docker` test for the no-target exit, tool-missing
+  exit, and cp-failure-aborts-before-sync paths. (3) The staging copy is created with the default
+  umask, so a full database copy (password hashes) sits world-readable under `./backups-offbox`
+  between runs - `umask 077` and/or delete after sync. (4) Overlapping cron runs race on the
+  `rm -rf` - wrap in `flock`. (5) `RSYNC_TARGET`/`RCLONE_REMOTE` set in `.env` are visible to
+  the container but NOT to the host script; the OPERATIONS.md cron example omits them so an
+  operator following "set it in .env" silently gets a local-only backup (exit 0). Source `.env`
+  in the script or put the variables in the cron line. (6) Caddy's `health_headers Host
+  {$SITE_ADDRESS}` breaks (503 for the whole site) if SITE_ADDRESS carries a scheme/port/comma
+  list or differs from ALLOWED_HOSTS - document "bare hostname, must be in ALLOWED_HOSTS" in
+  `.env.example`. (7) `compose.tailscale.yaml` `label=disable` is an acceptable, documented
+  tradeoff for a 10-20 user home server; a narrower alternative is `tailscale cert` on a timer
+  with the cert files mounted read-only, or a custom SELinux module for `tailscaled_var_run_t`.
+
+- **Homelab first-deploy checklist (deferred from task 10 by the owner, 2026-11-01).** Target:
+  `fedora-server.scorpion-tench.ts.net`, deployed after tasks 10, 11, 13 and 14 are done. Task 10
+  was closed without these; do them on the first real deploy and fix what turns up. (1) Host
+  reboot: containers return on their own and data is intact (task 10 check 4 only restarted the
+  Docker daemon). (2) Off-box backup to a real remote: set up SSH keys, run
+  `deploy/docker-backup.sh` with `RSYNC_TARGET`, and verify the files and `sha256sum -c` on the
+  other machine (check 10 only landed on a local directory). (3) Create a few recipes, then run
+  the restore drill (check 8 ran on an almost empty database). (4) Find out what already owns
+  ports 80/443 on the host; if anything does, choose between a different published port, an
+  existing reverse proxy, or `tailscale serve`. (5) Tailnet HTTPS Certificates are already
+  enabled; start with `-f compose.prod.yaml -f compose.tailscale.yaml`. Consider a narrower
+  SELinux answer than `label=disable`. (6) Decide whether to deploy `master` or cut release
+  branches/tags; rollback is documented as "check out the previous commit and rebuild" and
+  migrations do not roll back with the code. (7) `docker-backup.sh` cron/timer needs installing.

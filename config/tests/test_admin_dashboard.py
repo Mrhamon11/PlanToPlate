@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 from django.urls import reverse
 
-from config.admin import database_file_sizes
+from config.admin import build_info, database_file_sizes
 from recipes.models import Recipe
 
 pytestmark = pytest.mark.django_db
@@ -50,6 +50,38 @@ def test_dashboard_renders(staff_client):
     # Quick links resolve to the custom pages.
     assert reverse("admin:accounts_user_create") in body
     assert reverse("admin:core_import_json") in body
+
+
+def test_build_info_defaults_when_unset(monkeypatch):
+    """Outside Docker (dev, the test suite) neither GIT_SHA nor BUILD_DATE is set — the
+    dashboard must say so plainly rather than render a blank.
+    """
+    monkeypatch.delenv("GIT_SHA", raising=False)
+    monkeypatch.delenv("BUILD_DATE", raising=False)
+
+    assert build_info() == {"git_sha": "unknown", "build_date": "unknown"}
+
+
+def test_build_info_reads_environment(monkeypatch):
+    monkeypatch.setenv("GIT_SHA", "abc1234")
+    monkeypatch.setenv("BUILD_DATE", "2026-09-17T12:00:00Z")
+
+    assert build_info() == {"git_sha": "abc1234", "build_date": "2026-09-17T12:00:00Z"}
+
+
+def test_dashboard_renders_build_info(staff_client, monkeypatch):
+    monkeypatch.setenv("GIT_SHA", "deadbee")
+    monkeypatch.setenv("BUILD_DATE", "2026-09-17T00:00:00Z")
+
+    response = staff_client.get(reverse("admin:index"))
+
+    body = response.content.decode()
+    assert "deadbee" in body
+    assert "2026-09-17T00:00:00Z" in body
+    assert response.context["dashboard"]["build"] == {
+        "git_sha": "deadbee",
+        "build_date": "2026-09-17T00:00:00Z",
+    }
 
 
 def test_counts_accurate(staff_client, user_factory, unit):

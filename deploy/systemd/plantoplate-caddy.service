@@ -1,0 +1,36 @@
+[Unit]
+# Caddy, fronting PlanToPlate on a bare VPS (10.10). If the distro already ships a `caddy`
+# package with its own systemd unit, prefer that and just point its /etc/caddy/Caddyfile at
+# this project's ../../Caddyfile (with the one edit docs/OPERATIONS.md calls out: `app:8000`
+# -> `127.0.0.1:8000`, since there is no Docker network giving `app` a DNS name here) --
+# reinstalling that unit yourself only makes sense on a distro without one, or to run the
+# official static `caddy` binary directly. Either way this is the SAME Caddyfile the Docker
+# path uses (D15/D56's "one file, not a driftable second copy" pattern), not a second one.
+Description=Caddy web server for PlanToPlate
+Documentation=https://caddyserver.com/docs/
+After=network.target network-online.target plantoplate.service
+Wants=network-online.target
+Requires=plantoplate.service
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+Environment=SITE_ADDRESS=localhost
+Environment=XDG_DATA_HOME=/var/lib/caddy
+Environment=XDG_CONFIG_HOME=/var/lib/caddy
+ExecStart=/usr/bin/caddy run --environ --config /opt/plantoplate/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /opt/plantoplate/Caddyfile --force
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+LimitNPROC=512
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
